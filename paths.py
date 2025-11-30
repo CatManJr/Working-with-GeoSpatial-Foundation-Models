@@ -75,10 +75,6 @@ FLOOD_FULL = FLOOD_DIR / "FortMyersHelene_2024T269_flood.tif"
 FLOOD_CLIPPED = FLOOD_DIR / "FortMyersHelene_2024T269_flood_clipped.tif"
 FLOOD_VECTOR = FLOOD_DIR / "FortMyersHelene_2024T269_flood_clipped.shp"
 
-# Model directory
-MODELS_DIR = PROJECT_ROOT / "models"
-LGBM_MODELS_DIR = MODELS_DIR / "lgbm"
-
 # HuggingFace token
 HF_TOKEN_FILE = PROJECT_ROOT / "hf_token.txt"
 
@@ -94,14 +90,3 @@ def get_hf_token() -> str:
     if HF_TOKEN_FILE.exists():
         return HF_TOKEN_FILE.read_text().strip()
     return os.getenv("HF_TOKEN", "")
-
-
-# Ensure key directories exist
-ensure_dir(PROCESSED_DIR)
-ensure_dir(LGBM_DIR)
-ensure_dir(IBM_DIR)
-ensure_dir(IBM_TILES_DIR)
-ensure_dir(IBM_PREDICT_DIR)
-ensure_dir(FLOOD_DIR)
-ensure_dir(MODELS_DIR)
-ensure_dir(LGBM_MODELS_DIR)
