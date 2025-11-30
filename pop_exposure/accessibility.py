@@ -177,89 +177,109 @@ def load_and_align_data(pop_raster_path, flood_raster_path):
 
 def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
                          transform, crs, bandwidth, output_dir):
-    """Create visualizations with proper macOS resource cleanup"""
+    """Create visualizations with Web Mercator coordinates and longitude/latitude labels"""
     print(f"\nCreating visualizations...")
     
+    # Convert to Web Mercator for visualization
+    from rasterio.crs import CRS
+    from rasterio.warp import transform_bounds
+    web_mercator = CRS.from_epsg(3857)
+    
     try:
-        boundary = gpd.read_file(CITY_BOUNDARY).to_crs(crs)
+        boundary = gpd.read_file(CITY_BOUNDARY).to_crs(web_mercator)
     except Exception as e:
         print(f"  Warning: Could not load boundary: {e}")
         boundary = None
     
-    # Calculate extent
+    # Calculate extent in Web Mercator
     height, width = risk_raster.shape
-    left = transform[2]
-    top = transform[5]
-    right = left + width * transform[0]
-    bottom = top + height * transform[4]
+    
+    # Get bounds in original CRS
+    left_orig = transform[2]
+    top_orig = transform[5]
+    right_orig = left_orig + width * transform[0]
+    bottom_orig = top_orig + height * transform[4]
+    
+    # Transform bounds to Web Mercator
+    left, bottom, right, top = transform_bounds(
+        crs, web_mercator,
+        left_orig, bottom_orig, right_orig, top_orig
+    )
     extent = [left, right, bottom, top]
     
-    # Figure 1: Four-panel overview
+    # Convert Web Mercator to lat/lon for display labels
+    from pyproj import Transformer
+    transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+    
+    def format_coord_labels(ax, extent):
+        """Add longitude/latitude labels to axes"""
+        from matplotlib.ticker import FuncFormatter
+        
+        def lon_formatter(x, pos):
+            lon, _ = transformer.transform(x, (extent[2] + extent[3]) / 2)
+            return f'{lon:.3f}°'
+        
+        def lat_formatter(y, pos):
+            _, lat = transformer.transform((extent[0] + extent[1]) / 2, y)
+            return f'{lat:.3f}°'
+        
+        ax.xaxis.set_major_formatter(FuncFormatter(lon_formatter))
+        ax.yaxis.set_major_formatter(FuncFormatter(lat_formatter))
+    
+    # Three-panel overview
     fig1_success = False
     try:
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.subplots_adjust(hspace=0.3, wspace=0.3)
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        fig.subplots_adjust(hspace=0.25, wspace=0.3)
         
-        # Panel A: Population (top-left)
-        ax1 = axes[0, 0]
+        # Panel A: Population (left)
+        ax1 = axes[0]
         pop_masked = np.ma.masked_where(pop_data <= 0, pop_data)
         im1 = ax1.imshow(pop_masked, cmap='YlOrRd', extent=extent, 
                          vmin=0, vmax=np.percentile(pop_masked.compressed(), 98))
         if boundary is not None:
             boundary.boundary.plot(ax=ax1, color='black', linewidth=1)
         ax1.set_title('A. Population Density', fontweight='bold', loc='left')
-        ax1.set_xlabel('Easting (m)')
-        ax1.set_ylabel('Northing (m)')
+        ax1.set_xlabel('Longitude')
+        ax1.set_ylabel('Latitude')
+        format_coord_labels(ax1, extent)
         cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
         cbar1.set_label('People/hectare', rotation=270, labelpad=15)
-        ax1.ticklabel_format(style='sci', scilimits=(0,0))
         
-        # Panel B: Flood extent (top-right)
-        ax2 = axes[0, 1]
-        ax2.imshow(pop_masked, cmap='gray', alpha=0.2, extent=extent)
-        flood_masked = np.ma.masked_where(flood_data == 0, flood_data)
-        ax2.imshow(flood_masked, cmap='Blues', alpha=0.7, extent=extent)
-        if boundary is not None:
-            boundary.boundary.plot(ax=ax2, color='black', linewidth=1)
-        ax2.set_title('B. Flood Extent', fontweight='bold', loc='left')
-        ax2.set_xlabel('Easting (m)')
-        ax2.set_ylabel('Northing (m)')
-        ax2.ticklabel_format(style='sci', scilimits=(0,0))
-        
-        # Panel C: Distance to flood (bottom-left)
-        ax3 = axes[1, 0]
+        # Panel B: Distance to flood (center)
+        ax2 = axes[1]
         dist_masked = np.ma.masked_where(pop_data <= 0, distance_raster)
-        im3 = ax3.imshow(dist_masked, cmap='RdYlGn', extent=extent,
+        im2 = ax2.imshow(dist_masked, cmap='RdYlGn', extent=extent,
                          vmin=0, vmax=bandwidth)
         if boundary is not None:
-            boundary.boundary.plot(ax=ax3, color='black', linewidth=1)
-        ax3.set_title('C. Distance to Flood', fontweight='bold', loc='left')
-        ax3.set_xlabel('Easting (m)')
-        ax3.set_ylabel('Northing (m)')
-        cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
-        cbar3.set_label('Distance (m)', rotation=270, labelpad=15)
-        ax3.ticklabel_format(style='sci', scilimits=(0,0))
+            boundary.boundary.plot(ax=ax2, color='black', linewidth=1)
+        ax2.set_title('B. Distance to Flood', fontweight='bold', loc='left')
+        ax2.set_xlabel('Longitude')
+        ax2.set_ylabel('Latitude')
+        format_coord_labels(ax2, extent)
+        cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
+        cbar2.set_label('Distance (m)', rotation=270, labelpad=15)
         
-        # Panel D: G2SFCA Risk (bottom-right)
-        ax4 = axes[1, 1]
+        # Panel C: G2SFCA Risk (right)
+        ax3 = axes[2]
         risk_masked = np.ma.masked_where(risk_raster <= 0, risk_raster)
         if len(risk_masked.compressed()) > 0:
-            im4 = ax4.imshow(risk_masked, cmap='RdPu', extent=extent,
+            im3 = ax3.imshow(risk_masked, cmap='RdPu', extent=extent,
                             vmin=0, vmax=np.percentile(risk_masked.compressed(), 98))
             if boundary is not None:
-                boundary.boundary.plot(ax=ax4, color='black', linewidth=1)
-            ax4.set_title('D. G2SFCA Risk Index', fontweight='bold', loc='left')
-            ax4.set_xlabel('Easting (m)')
-            ax4.set_ylabel('Northing (m)')
-            cbar4 = plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
-            cbar4.set_label('Risk Score', rotation=270, labelpad=15)
-            ax4.ticklabel_format(style='sci', scilimits=(0,0))
+                boundary.boundary.plot(ax=ax3, color='black', linewidth=1)
+            ax3.set_title('C. G2SFCA Risk Index', fontweight='bold', loc='left')
+            ax3.set_xlabel('Longitude')
+            ax3.set_ylabel('Latitude')
+            format_coord_labels(ax3, extent)
+            cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
+            cbar3.set_label('Risk Score', rotation=270, labelpad=15)
         
         plt.suptitle(f'G2SFCA Flood Risk Analysis - Fort Myers (Hurricane Helene 2024)\n'
                      f'Raster-based, Euclidean Distance, Bandwidth={bandwidth}m',
                      fontsize=13, fontweight='bold', y=0.98)
         
-        fig1_path = output_dir / f"Fig1_g2sfca_raster_{bandwidth}m.png"
+        fig1_path = output_dir / f"g2sfca_raster_{bandwidth}m.png"
         
         # Force rendering and save
         fig.canvas.draw()
@@ -267,28 +287,28 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
         
         # Critical: Close figure and clear all references
         plt.close(fig)
-        del fig, axes, ax1, ax2, ax3, ax4
+        del fig, axes, ax1, ax2, ax3
         if 'im1' in locals(): del im1
+        if 'im2' in locals(): del im2
         if 'im3' in locals(): del im3
-        if 'im4' in locals(): del im4
         if 'cbar1' in locals(): del cbar1
+        if 'cbar2' in locals(): del cbar2
         if 'cbar3' in locals(): del cbar3
-        if 'cbar4' in locals(): del cbar4
         
         plt.close('all')
-        gc.collect()  # Force garbage collection
+        gc.collect()
         
         print(f"  ✓ Saved: {fig1_path}")
         fig1_success = True
         
     except Exception as e:
-        print(f"  ⚠ Error creating Fig1: {e}")
+        print(f"  ⚠ Error creating overview figure: {e}")
         import traceback
         traceback.print_exc()
         plt.close('all')
         gc.collect()
     
-    # Figure 2: Risk classification
+    # Risk classification
     fig2_success = False
     try:
         risk_positive = risk_raster[risk_raster > 0]
@@ -325,13 +345,13 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
             
             ax.set_title(f'Risk Classification (G2SFCA)\nBandwidth={bandwidth}m',
                         fontweight='bold', pad=15)
-            ax.set_xlabel('Easting (m)')
-            ax.set_ylabel('Northing (m)')
-            ax.ticklabel_format(style='sci', scilimits=(0,0))
+            ax.set_xlabel('Longitude')
+            ax.set_ylabel('Latitude')
+            format_coord_labels(ax, extent)
             
             # Add scale bar
             from matplotlib.patches import Rectangle
-            scale_length = 1000
+            scale_length = 1000  # 1km in Web Mercator meters
             scale_x = extent[0] + (extent[1] - extent[0]) * 0.05
             scale_y = extent[2] + (extent[3] - extent[2]) * 0.05
             scale_bar = Rectangle((scale_x, scale_y), scale_length, 50, 
@@ -341,7 +361,7 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
                     ha='center', va='bottom', fontsize=8, fontweight='bold',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
             
-            fig2_path = output_dir / f"Fig2_g2sfca_raster_class_{bandwidth}m.png"
+            fig2_path = output_dir / f"g2sfca_raster_class_{bandwidth}m.png"
             
             # Force rendering and save
             fig.canvas.draw()
@@ -354,14 +374,14 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
             if 'norm' in locals(): del norm
             
             plt.close('all')
-            gc.collect()  # Force garbage collection
+            gc.collect()
             
             print(f"  ✓ Saved: {fig2_path}")
             fig2_success = True
         else:
-            print(f"  ⚠ No positive risk values, skipping Fig2")
+            print(f"  ⚠ No positive risk values, skipping classification figure")
     except Exception as e:
-        print(f"  ⚠ Error creating Fig2: {e}")
+        print(f"  ⚠ Error creating classification figure: {e}")
         import traceback
         traceback.print_exc()
         plt.close('all')

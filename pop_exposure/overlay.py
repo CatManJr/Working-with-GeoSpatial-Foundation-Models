@@ -43,25 +43,55 @@ def create_visualization(pop_data, flood_coverage, exposure_weighted,
                          total_population, exposed_population,
                          output_dir):
     """
-    Create nature-style minimalist visualization maps
+    Create nature-style minimalist visualization maps with Web Mercator coordinates
     """
     print(f"\nCreating visualizations...")
+    
+    # Convert to Web Mercator for visualization
+    from rasterio.crs import CRS
+    from rasterio.warp import transform_bounds
+    web_mercator = CRS.from_epsg(3857)
     
     # Load city boundary for context
     try:
         boundary = gpd.read_file(CITY_BOUNDARY)
-        boundary = boundary.to_crs(pop_crs)
+        boundary = boundary.to_crs(web_mercator)
         bounds = boundary.total_bounds
     except:
         bounds = None
     
-    # Get raster extent
+    # Get raster extent in original CRS
     height, width = pop_data.shape
-    left = pop_transform[2]
-    top = pop_transform[5]
-    right = left + width * pop_transform[0]
-    bottom = top + height * pop_transform[4]
+    left_orig = pop_transform[2]
+    top_orig = pop_transform[5]
+    right_orig = left_orig + width * pop_transform[0]
+    bottom_orig = top_orig + height * pop_transform[4]
+    
+    # Transform bounds to Web Mercator
+    left, bottom, right, top = transform_bounds(
+        pop_crs, web_mercator,
+        left_orig, bottom_orig, right_orig, top_orig
+    )
     extent = [left, right, bottom, top]
+    
+    # Convert Web Mercator to lat/lon for display labels
+    from pyproj import Transformer
+    transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+    
+    def format_coord_labels(ax, extent):
+        """Add longitude/latitude labels to axes"""
+        from matplotlib.ticker import FuncFormatter
+        
+        def lon_formatter(x, pos):
+            lon, _ = transformer.transform(x, (extent[2] + extent[3]) / 2)
+            return f'{lon:.3f}°'
+        
+        def lat_formatter(y, pos):
+            _, lat = transformer.transform((extent[0] + extent[1]) / 2, y)
+            return f'{lat:.3f}°'
+        
+        ax.xaxis.set_major_formatter(FuncFormatter(lon_formatter))
+        ax.yaxis.set_major_formatter(FuncFormatter(lat_formatter))
     
     # === Figure 1: Three-panel overview ===
     fig = plt.figure(figsize=(14, 4.5))
@@ -74,11 +104,11 @@ def create_visualization(pop_data, flood_coverage, exposure_weighted,
     if bounds is not None:
         boundary.boundary.plot(ax=ax1, color='black', linewidth=1, alpha=0.8)
     ax1.set_title('A. Population Density', fontweight='bold', loc='left')
-    ax1.set_xlabel('Easting (m)')
-    ax1.set_ylabel('Northing (m)')
+    ax1.set_xlabel('Longitude')
+    ax1.set_ylabel('Latitude')
+    format_coord_labels(ax1, extent)
     cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
     cbar1.set_label('People per hectare', rotation=270, labelpad=15, fontsize=8)
-    ax1.ticklabel_format(style='scientific', axis='both', scilimits=(0,0))
     
     # Panel B: Flood Coverage Rate
     ax2 = plt.subplot(132)
@@ -90,12 +120,12 @@ def create_visualization(pop_data, flood_coverage, exposure_weighted,
     if bounds is not None:
         boundary.boundary.plot(ax=ax2, color='black', linewidth=1, alpha=0.8)
     ax2.set_title('B. Flood Coverage Rate', fontweight='bold', loc='left')
-    ax2.set_xlabel('Easting (m)')
-    ax2.set_ylabel('Northing (m)')
+    ax2.set_xlabel('Longitude')
+    ax2.set_ylabel('Latitude')
+    format_coord_labels(ax2, extent)
     cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
     cbar2.set_label('Coverage (%)', rotation=270, labelpad=15, fontsize=8)
     cbar2.ax.set_yticklabels([f'{int(x*100)}' for x in cbar2.get_ticks()])
-    ax2.ticklabel_format(style='scientific', axis='both', scilimits=(0,0))
     
     # Panel C: Exposed Population
     ax3 = plt.subplot(133)
@@ -105,17 +135,17 @@ def create_visualization(pop_data, flood_coverage, exposure_weighted,
     if bounds is not None:
         boundary.boundary.plot(ax=ax3, color='black', linewidth=1, alpha=0.8)
     ax3.set_title('C. Exposed Population', fontweight='bold', loc='left')
-    ax3.set_xlabel('Easting (m)')
-    ax3.set_ylabel('Northing (m)')
+    ax3.set_xlabel('Longitude')
+    ax3.set_ylabel('Latitude')
+    format_coord_labels(ax3, extent)
     cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
     cbar3.set_label('People per hectare', rotation=270, labelpad=15, fontsize=8)
-    ax3.ticklabel_format(style='scientific', axis='both', scilimits=(0,0))
     
     plt.suptitle('Population Flood Exposure Analysis - Fort Myers, FL (Hurricane Helene 2024)',
                  fontsize=11, fontweight='bold', y=0.98)
     
     plt.tight_layout()
-    output_file1 = output_dir / "Fig1_exposure_overview.png"
+    output_file1 = output_dir / "exposure_overview.png"
     plt.savefig(output_file1, dpi=300, bbox_inches='tight')
     print(f"  ✓ Saved: {output_file1}")
     plt.close()
@@ -158,13 +188,13 @@ def create_visualization(pop_data, flood_coverage, exposure_weighted,
               edgecolor='black', title='Flood Coverage')
     
     ax.set_title('Flood Risk Classification by Coverage Rate', fontweight='bold', pad=15)
-    ax.set_xlabel('Easting (m)')
-    ax.set_ylabel('Northing (m)')
-    ax.ticklabel_format(style='scientific', axis='both', scilimits=(0,0))
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    format_coord_labels(ax, extent)
     
     # Add scale bar (approximate)
     from matplotlib.patches import Rectangle
-    scale_length = 1000  # 1 km in meters
+    scale_length = 1000  # 1 km in Web Mercator meters
     scale_x = extent[0] + (extent[1] - extent[0]) * 0.05
     scale_y = extent[2] + (extent[3] - extent[2]) * 0.05
     ax.add_patch(Rectangle((scale_x, scale_y), scale_length, 50, 
@@ -173,55 +203,9 @@ def create_visualization(pop_data, flood_coverage, exposure_weighted,
             ha='center', va='bottom', fontsize=8, fontweight='bold',
             bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
     
-    output_file2 = output_dir / "Fig2_risk_classification.png"
+    output_file2 = output_dir / "risk_classification.png"
     plt.savefig(output_file2, dpi=300, bbox_inches='tight')
     print(f"  ✓ Saved: {output_file2}")
-    plt.close()
-    
-    # === Figure 3: Statistical Summary ===
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-    
-    # Bar chart: Coverage categories
-    categories = [stat['category'] for stat in coverage_stats]
-    populations = [stat['total_population'] for stat in coverage_stats]
-    exposed = [stat['exposed_population'] for stat in coverage_stats]
-    
-    x = np.arange(len(categories))
-    width = 0.35
-    
-    bars1 = ax1.bar(x - width/2, populations, width, label='Total Population',
-                    color='#4292c6', edgecolor='black', linewidth=0.5)
-    bars2 = ax1.bar(x + width/2, exposed, width, label='Exposed Population',
-                    color='#cb181d', edgecolor='black', linewidth=0.5)
-    
-    ax1.set_xlabel('Flood Coverage Category', fontweight='bold')
-    ax1.set_ylabel('Population', fontweight='bold')
-    ax1.set_title('Population Distribution by Flood Coverage', fontweight='bold')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels([c.split('(')[0].strip() for c in categories], rotation=15, ha='right')
-    ax1.legend(frameon=True, edgecolor='black')
-    ax1.grid(axis='y', alpha=0.3, linewidth=0.5)
-    ax1.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
-    
-    # Pie chart: Overall exposure
-    exposure_pct = (exposed_population / total_population * 100)
-    safe_pct = 100 - exposure_pct
-    
-    sizes = [exposed_population, total_population - exposed_population]
-    labels = [f'Exposed\n{exposed_population:,.0f}\n({exposure_pct:.1f}%)',
-              f'Safe\n{total_population - exposed_population:,.0f}\n({safe_pct:.1f}%)']
-    colors_pie = ['#cb181d', '#41ab5d']
-    explode = (0.05, 0)
-    
-    ax2.pie(sizes, labels=labels, colors=colors_pie, autopct='',
-            startangle=90, explode=explode, textprops={'fontsize': 9, 'fontweight': 'bold'},
-            wedgeprops={'edgecolor': 'black', 'linewidth': 1})
-    ax2.set_title('Overall Population Exposure', fontweight='bold')
-    
-    plt.tight_layout()
-    output_file3 = output_dir / "Fig3_statistical_summary.png"
-    plt.savefig(output_file3, dpi=300, bbox_inches='tight')
-    print(f"  ✓ Saved: {output_file3}")
     plt.close()
     
     print(f"\n✓ All visualizations saved to: {output_dir}")
