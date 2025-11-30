@@ -65,24 +65,27 @@ uv add [library] # Use this to add a library to your environment
 # GEE_script/fetch_data.js
 ```
 
-### 2. Extract Permanent Water
+### 2. Sentinel2 L1C Reconstruction from Sentinel1 GRD and Satellite Embedding V1 (Remove Clouds)
 ```bash
-uv run flood_extract/permanent_water.py
-```
+# Check validity of raw files
+uv run reconstruct/check.py
 
-### 3. S2 Reconstruction (Remove Clouds)
-```bash
-# Step 1: Build ML dataset
+# Build ML dataset
 uv run reconstruct/make_dataset.py
 
-# Step 2: Train LightGBM models
+# Train LightGBM models
 uv run reconstruct/train.py
 
-# Step 3: Reconstruct cloudy pixels
+# Reconstruct cloudy pixels
 uv run reconstruct/reconstruct.py
 
-# Step 4: Visualize results
+# Visualize results
 uv run reconstruct/viz.py
+```
+
+### 3. Get Permanent Water
+```bash
+uv run flood_extract/permanent_water.py
 ```
 
 ### 4. Flood Detection
@@ -96,6 +99,12 @@ uv run water_segmentation/predict.py
 # Step 3: Extract flood areas
 uv run flood_extract/extract_flood.py
 ```
+
+### 5. Population Exposure
+Ongoing
+
+### 6. UI
+Ongoing
 
 ## Path Configuration
 
