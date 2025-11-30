@@ -1,0 +1,17 @@
+drive-download-20251007T000808Z-1-001
+drive-download-20251007T000743Z-1-001
+**.zip
+
+**_.**
+**_.**
+
+data/*
+!data/README.md
+
+.venv/
+__pycache__/
+**.qgz
+
+// Private files
+hf_token.txt
+.env
