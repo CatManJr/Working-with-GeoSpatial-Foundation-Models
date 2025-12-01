@@ -28,4 +28,6 @@ EXPOSE 8000
 
 # 6. Start command
 # Note: We run the backend, which now also serves the frontend
+# Set PYTHONPATH to include the backend directory so modules can be found
+ENV PYTHONPATH=/app/app/backend
 CMD ["uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
