@@ -4,8 +4,8 @@ drive-download-20251007T000743Z-1-001
 app/frontend/node_modules
 app/frontend/build
 
-**_.**
-**_.**
+**._**
+**._.**
 
 data/*
 !data/README.md
