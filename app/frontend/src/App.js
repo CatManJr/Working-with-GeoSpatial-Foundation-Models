@@ -1,76 +1,178 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
+import React, { useState, useEffect, useCallback } from 'react';
+import { MapContainer, TileLayer, GeoJSON, ImageOverlay } from 'react-leaflet';
 import axios from 'axios';
 import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, 
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import 'leaflet/dist/leaflet.css';
 import './App.css';
 
 const API_BASE = 'http://localhost:8000';
 
-// Component to fit map bounds
-function FitBounds({ bounds }) {
-  const map = useMap();
-  useEffect(() => {
-    if (bounds) {
-      map.fitBounds([
-        [bounds[1], bounds[0]], // southwest
-        [bounds[3], bounds[2]]  // northeast
-      ]);
-    }
-  }, [bounds, map]);
-  return null;
-}
+// Basemap options
+const BASEMAPS = {
+  osm: {
+    name: 'OpenStreetMap',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  },
+  satellite: {
+    name: 'Satellite (Esri)',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri'
+  },
+  topo: {
+    name: 'Topographic',
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+  },
+  cartodb: {
+    name: 'CartoDB Light',
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://carto.com/">CartoDB</a>'
+  },
+  dark: {
+    name: 'CartoDB Dark',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://carto.com/">CartoDB</a>'
+  }
+};
 
-// Main Dashboard Component
+const LayerTree = ({ layers, selectedLayers, onLayerChange }) => {
+  const [openGroups, setOpenGroups] = useState({
+    'Population': true,
+    'Risk Analysis': true,
+    'G2SFCA Risk': true
+  });
+
+  const toggleGroup = (group) => {
+    setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
+
+  const renderLayer = (layer) => (
+    <li key={layer.id}>
+      <label>
+        <input
+          type="checkbox"
+          checked={selectedLayers.includes(layer.id)}
+          onChange={() => onLayerChange(layer.id)}
+        /> {layer.name}
+      </label>
+    </li>
+  );
+
+  const layerConfig = [
+    { id: 'flood', name: 'Flood Extent' },
+    {
+      name: 'Population', children: [
+        { id: 'population', name: 'Population Density' },
+        { id: 'exposed_population', name: 'Exposed Population' },
+      ]
+    },
+    {
+      name: 'Risk Analysis', children: [
+        { id: 'exposure', name: 'Flood Coverage Rate' },
+        {
+          name: 'G2SFCA Risk', children: [
+            { id: 'g2sfca_250m', name: '250m' },
+            { id: 'g2sfca_500m', name: '500m' },
+            { id: 'g2sfca_1000m', name: '1000m' },
+            { id: 'g2sfca_2500m', name: '2500m' },
+          ]
+        }
+      ]
+    }
+  ];
+
+  const renderGroup = (group) => (
+    <li key={group.name} className="layer-tree-group">
+      <span onClick={() => toggleGroup(group.name)}>
+        {openGroups[group.name] ? '▼' : '►'} {group.name}
+      </span>
+      {openGroups[group.name] && (
+        <ul>
+          {group.children.map(child =>
+            child.children ? renderGroup(child) : renderLayer(child)
+          )}
+        </ul>
+      )}
+    </li>
+  );
+
+  return (
+    <div className="layer-tree">
+      <ul>
+        {layerConfig.map(item => item.children ? renderGroup(item) : renderLayer(item))}
+      </ul>
+    </div>
+  );
+};
+
 function App() {
+  const [loading, setLoading] = useState(true);
   const [boundary, setBoundary] = useState(null);
   const [floodExtent, setFloodExtent] = useState(null);
   const [statistics, setStatistics] = useState(null);
   const [layers, setLayers] = useState({});
-  const [selectedLayer, setSelectedLayer] = useState('flood');
-  const [bounds, setBounds] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedLayers, setSelectedLayers] = useState(['flood']);
+  const [selectedBasemap, setSelectedBasemap] = useState('cartodb');
+  const [rasterBounds, setRasterBounds] = useState({});
+  const [center] = useState([26.6406, -81.8723]); // Fort Myers
+  const [zoom] = useState(11);
+  const [isStatsPanelCollapsed, setIsStatsPanelCollapsed] = useState(false);
 
-  // Load data on mount
+  const loadRasterBounds = useCallback(async (layerName) => {
+    if (rasterBounds[layerName]) return; // Avoid refetching
+    try {
+      const response = await axios.get(`${API_BASE}/api/raster-bounds/${layerName}`);
+      setRasterBounds(prev => ({ ...prev, [layerName]: response.data.bounds }));
+    } catch (error) {
+      console.error(`Error loading raster bounds for ${layerName}:`, error);
+    }
+  }, [rasterBounds]);
+
   useEffect(() => {
-    loadData();
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        
+        const [boundaryRes, floodRes, statsRes, layersRes] = await Promise.all([
+          axios.get(`${API_BASE}/api/boundary`),
+          axios.get(`${API_BASE}/api/flood-extent`),
+          axios.get(`${API_BASE}/api/statistics`),
+          axios.get(`${API_BASE}/api/risk-layers`)
+        ]);
+
+        setBoundary(boundaryRes.data);
+        setFloodExtent(floodRes.data);
+        setStatistics(statsRes.data);
+        setLayers(layersRes.data);
+
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setLoading(false);
+      }
+    };
+    loadInitialData();
   }, []);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      
-      // Load boundary
-      const boundaryRes = await axios.get(`${API_BASE}/api/boundary`);
-      setBoundary(boundaryRes.data);
-      
-      // Load flood extent
-      const floodRes = await axios.get(`${API_BASE}/api/flood-extent`);
-      setFloodExtent(floodRes.data);
-      
-      // Load statistics
-      const statsRes = await axios.get(`${API_BASE}/api/statistics`);
-      setStatistics(statsRes.data);
-      
-      // Load available layers
-      const layersRes = await axios.get(`${API_BASE}/api/risk-layers`);
-      setLayers(layersRes.data);
-      
-      // Get bounds for initial view
-      const boundsRes = await axios.get(`${API_BASE}/api/raster-bounds/flood`);
-      setBounds(boundsRes.data.bounds);
-      
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    selectedLayers.forEach(layer => {
+      if (layer !== 'flood' && layers[layer]) {
+        loadRasterBounds(layer);
+      }
+    });
+  }, [selectedLayers, layers, loadRasterBounds]);
 
-  const COLORS = ['#fc9272', '#de2d26', '#a50f15'];
+  const handleLayerChange = (layerId) => {
+    setSelectedLayers(prev =>
+      prev.includes(layerId)
+        ? prev.filter(l => l !== layerId)
+        : [...prev, layerId]
+    );
+  };
 
   if (loading) {
     return (
@@ -80,196 +182,201 @@ function App() {
     );
   }
 
+  const getMetricValue = (metricName, unit = null) => {
+    if (unit) {
+      const metric = statistics?.exposure?.find(
+        item => item.Metric === metricName && item.Unit === unit
+      );
+      return metric ? parseFloat(metric.Value) : 0;
+    } else {
+      const metric = statistics?.exposure?.find(item => item.Metric === metricName);
+      return metric ? parseFloat(metric.Value) : 0;
+    }
+  };
+
+  const totalPop = getMetricValue('Total Population');
+  const exposedPop = getMetricValue('Exposed Population');
+  const exposureRate = getMetricValue('Exposure Percentage');
+  const floodArea = getMetricValue('Flooded Area', 'square kilometers');
+
+  const coverageData = statistics?.coverage_categories?.map(item => ({
+    name: item.category.split('(')[0].trim(),
+    population: item.total_population,
+    exposed: item.exposed_population
+  })) || [];
+
+  const g2sfcaData = Object.entries(statistics?.g2sfca || {}).map(([bw, data]) => ({
+    bandwidth: bw,
+    data: data
+  }));
+
+  const currentBasemap = BASEMAPS[selectedBasemap];
+
   return (
     <div className="dashboard">
-      {/* Header */}
       <header className="header">
-        <h1>🌊 Fort Myers Flood Risk Analysis Dashboard</h1>
+        <h1>Fort Myers Flood Risk Analysis Dashboard</h1>
         <p>Hurricane Helene 2024 - Population Exposure Assessment</p>
       </header>
 
-      {/* Main Content */}
       <div className="content">
-        {/* Left Panel - Map */}
         <div className="map-panel">
           <div className="layer-controls">
-            <h3>Map Layers</h3>
-            <select 
-              value={selectedLayer} 
-              onChange={(e) => setSelectedLayer(e.target.value)}
-              className="layer-select"
-            >
-              {Object.entries(layers).map(([key, layer]) => (
-                <option key={key} value={key}>{layer.name}</option>
-              ))}
-            </select>
+            <div className="control-group">
+              <h3>Base Map</h3>
+              <select 
+                className="layer-select"
+                value={selectedBasemap}
+                onChange={(e) => setSelectedBasemap(e.target.value)}
+              >
+                {Object.entries(BASEMAPS).map(([key, basemap]) => (
+                  <option key={key} value={key}>{basemap.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="control-group">
+              <h3>Data Layers</h3>
+              <LayerTree 
+                layers={layers}
+                selectedLayers={selectedLayers}
+                onLayerChange={handleLayerChange}
+              />
+            </div>
           </div>
 
-          <MapContainer
-            center={[26.6406, -81.8723]} // Fort Myers
-            zoom={12}
-            style={{ height: '100%', width: '100%' }}
-          >
+          <MapContainer center={center} zoom={zoom} style={{ height: '100%', width: '100%' }}>
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution={currentBasemap.attribution}
+              url={currentBasemap.url}
             />
             
-            {bounds && <FitBounds bounds={bounds} />}
-            
-            {/* City Boundary */}
             {boundary && (
-              <GeoJSON
+              <GeoJSON 
                 data={boundary}
-                style={{
-                  color: '#333',
-                  weight: 2,
-                  fillOpacity: 0
+                style={{ 
+                  color: '#d9534f',
+                  weight: 3,
+                  fillOpacity: 0,
+                  opacity: 0.8,
+                  dashArray: '8, 4'
                 }}
               />
             )}
-            
-            {/* Flood Extent */}
-            {selectedLayer === 'flood' && floodExtent && (
-              <GeoJSON
+
+            {selectedLayers.includes('flood') && floodExtent && (
+              <GeoJSON 
                 data={floodExtent}
-                style={{
-                  color: '#08519c',
-                  weight: 1,
-                  fillColor: '#3182bd',
-                  fillOpacity: 0.6
-                }}
+                style={{ color: '#0275d8', weight: 1, fillColor: '#0275d8', fillOpacity: 0.5 }}
               />
             )}
+
+            {selectedLayers.map(layerId => {
+              if (layerId !== 'flood' && rasterBounds[layerId]) {
+                return (
+                  <ImageOverlay
+                    key={layerId}
+                    url={`${API_BASE}/api/raster-png/${layerId}?width=1200`}
+                    bounds={[
+                      [rasterBounds[layerId][1], rasterBounds[layerId][0]],
+                      [rasterBounds[layerId][3], rasterBounds[layerId][2]]
+                    ]}
+                    opacity={0.7}
+                  />
+                );
+              }
+              return null;
+            })}
           </MapContainer>
+
+          <div className="map-legend">
+            <h4>Legend</h4>
+            <div className="legend-item">
+              <div className="legend-line" style={{ borderColor: '#d9534f', borderStyle: 'dashed' }}></div>
+              <span>City Boundary</span>
+            </div>
+            {selectedLayers.includes('flood') && (
+              <div className="legend-item">
+                <div className="legend-box" style={{ backgroundColor: 'rgba(2, 117, 216, 0.6)' }}></div>
+                <span>Flood Extent</span>
+              </div>
+            )}
+            {selectedLayers.map(layerId => {
+               if (layerId !== 'flood' && layers[layerId]) {
+                 return (
+                  <div className="legend-item" key={layerId}>
+                    <div className="legend-gradient" data-colormap={layers[layerId].colormap}></div>
+                    <span>{layers[layerId].name}</span>
+                  </div>
+                 )
+               }
+               return null;
+            })}
+          </div>
         </div>
 
-        {/* Right Panel - Statistics */}
-        <div className="stats-panel">
-          <h2>📊 Analysis Results</h2>
+        <div className={`stats-panel ${isStatsPanelCollapsed ? 'collapsed' : ''}`}>
+          <button 
+            className="stats-toggle-button" 
+            onClick={() => setIsStatsPanelCollapsed(!isStatsPanelCollapsed)}
+            title={isStatsPanelCollapsed ? 'Show Panel' : 'Hide Panel'}
+          >
+            {isStatsPanelCollapsed ? '❮' : '❯'}
+          </button>
+
+          <h2>Key Metrics</h2>
           
-          {/* Key Metrics */}
-          {statistics?.exposure && (
-            <div className="metrics-grid">
-              {statistics.exposure.map((stat, idx) => {
-                if (stat.Metric === 'Total Population') {
-                  return (
-                    <div key={idx} className="metric-card">
-                      <div className="metric-label">Total Population</div>
-                      <div className="metric-value">
-                        {parseFloat(stat.Value).toLocaleString()}
-                      </div>
-                    </div>
-                  );
-                }
-                if (stat.Metric === 'Exposed Population') {
-                  return (
-                    <div key={idx} className="metric-card danger">
-                      <div className="metric-label">Exposed Population</div>
-                      <div className="metric-value">
-                        {parseFloat(stat.Value).toLocaleString()}
-                      </div>
-                    </div>
-                  );
-                }
-                if (stat.Metric === 'Exposure Percentage') {
-                  return (
-                    <div key={idx} className="metric-card warning">
-                      <div className="metric-label">Exposure Rate</div>
-                      <div className="metric-value">
-                        {parseFloat(stat.Value).toFixed(1)}%
-                      </div>
-                    </div>
-                  );
-                }
-                if (stat.Metric === 'Flooded Area') {
-                  return (
-                    <div key={idx} className="metric-card info">
-                      <div className="metric-label">Flooded Area</div>
-                      <div className="metric-value">
-                        {parseFloat(stat.Value).toFixed(2)} {stat.Unit}
-                      </div>
-                    </div>
-                  );
-                }
-                return null;
-              })}
+          <div className="metrics-grid">
+            <div className="metric-card">
+              <div className="metric-label">Total Population</div>
+              <div className="metric-value">{totalPop.toLocaleString()}</div>
             </div>
-          )}
-
-          {/* Coverage Categories Chart */}
-          {statistics?.coverage_categories && (
-            <div className="chart-container">
-              <h3>Population by Flood Coverage</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={statistics.coverage_categories}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="category" 
-                    angle={-15} 
-                    textAnchor="end" 
-                    height={80}
-                    fontSize={11}
-                  />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="total_population" fill="#4292c6" name="Total" />
-                  <Bar dataKey="exposed_population" fill="#cb181d" name="Exposed" />
-                </BarChart>
-              </ResponsiveContainer>
+            
+            <div className="metric-card danger">
+              <div className="metric-label">Exposed Population</div>
+              <div className="metric-value">{exposedPop.toLocaleString()}</div>
             </div>
-          )}
-
-          {/* G2SFCA Risk Analysis */}
-          {statistics?.g2sfca && (
-            <div className="chart-container">
-              <h3>G2SFCA Risk Assessment (500m)</h3>
-              {statistics.g2sfca['500m'] && (
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie
-                      data={statistics.g2sfca['500m']}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(entry) => `${entry.risk_category}: ${(entry.total_population).toLocaleString()}`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="total_population"
-                    >
-                      {statistics.g2sfca['500m'].map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
+            
+            <div className="metric-card warning">
+              <div className="metric-label">Exposure Rate</div>
+              <div className="metric-value">{exposureRate.toFixed(1)}%</div>
             </div>
-          )}
+            
+            <div className="metric-card info">
+              <div className="metric-label">Flood Area</div>
+              <div className="metric-value">{floodArea.toFixed(1)} km²</div>
+            </div>
+          </div>
 
-          {/* Bandwidth Comparison */}
-          {statistics?.g2sfca && Object.keys(statistics.g2sfca).length > 0 && (
-            <div className="chart-container">
-              <h3>Risk by Bandwidth Parameter</h3>
-              <div className="bandwidth-grid">
-                {Object.entries(statistics.g2sfca).map(([bw, data]) => (
-                  <div key={bw} className="bandwidth-card">
-                    <h4>{bw}</h4>
-                    {data.map((cat, idx) => (
-                      <div key={idx} className="risk-row">
-                        <span className="risk-label">{cat.risk_category}:</span>
-                        <span className="risk-value">
-                          {parseFloat(cat.total_population).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
+          <h3>Population by Coverage Category</h3>
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={coverageData} margin={{ top: 5, right: 20, left: 10, bottom: 70 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} />
+                <YAxis />
+                <Tooltip />
+                <Legend verticalAlign="top" />
+                <Bar dataKey="population" fill="#5bc0de" name="Total" />
+                <Bar dataKey="exposed" fill="#f0ad4e" name="Exposed" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <h3>G2SFCA Risk Assessment</h3>
+          <div className="bandwidth-grid">
+            {g2sfcaData.map(({ bandwidth, data }) => (
+              <div key={bandwidth} className="bandwidth-card">
+                <h4>Bandwidth: {bandwidth}</h4>
+                {data && data.map((riskCat, idx) => (
+                  <div key={idx} className="risk-row">
+                    <span className="risk-label">{riskCat.risk_category} Risk</span>
+                    <span className="risk-value">{Math.round(riskCat.total_population).toLocaleString()} people</span>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
     </div>

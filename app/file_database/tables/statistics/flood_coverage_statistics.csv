@@ -1,0 +1,6 @@
+category,coverage_range,community_units,total_population,exposed_population,avg_coverage
+No Flood (0%),0-1%,11189,102706.33,0.0,0.0
+Minor (1-25%),1-25%,0,0.0,0.0,0.0
+Moderate (25-50%),25-50%,0,0.0,0.0,0.0
+Severe (50-75%),50-75%,0,0.0,0.0,0.0
+Extreme (75-100%),75-100%,843,6466.7666,6466.7666,100.0

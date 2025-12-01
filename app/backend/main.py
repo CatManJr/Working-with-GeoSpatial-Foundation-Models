@@ -1,7 +1,7 @@
 """
 FastAPI Backend for Flood Risk Analysis Dashboard
 Serves geospatial data and statistics for interactive visualization
-Uses FileDatabase for automatic data discovery and indexing
+Uses File Geodatabase for centralized data management
 
 Production: Serves built React app as static files
 Development: API only with CORS enabled for separate React dev server
@@ -22,6 +22,7 @@ from io import BytesIO
 from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from shapely.geometry import shape
 import sys
 import os
 
@@ -29,8 +30,8 @@ import os
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from paths import DATA_DIR, CITY_BOUNDARY
 
-# Import file database
-from file_database import get_file_db
+# Import file geodatabase
+from file_geodatabase import get_geodatabase
 
 # Check if running in production mode (frontend build exists)
 FRONTEND_BUILD = Path(__file__).parent.parent / "frontend" / "build"
@@ -38,7 +39,7 @@ PRODUCTION_MODE = FRONTEND_BUILD.exists()
 
 app = FastAPI(
     title="Fort Myers Flood Risk Analysis API",
-    description="Full-stack flood risk analysis dashboard",
+    description="Full-stack flood risk analysis dashboard with File Geodatabase",
     version="2.0.0"
 )
 
@@ -52,105 +53,76 @@ if not PRODUCTION_MODE:
         allow_headers=["*"],
     )
 
-# Initialize file database
-file_db = get_file_db()
+# Initialize file geodatabase
+gdb = get_geodatabase()
 
 @app.get("/")
 async def root():
     return {
         "message": "Fort Myers Flood Risk Analysis API",
         "version": "2.0.0",
-        "features": ["File Database", "Auto-Discovery"],
+        "features": ["File Geodatabase", "Centralized Data Management"],
         "endpoints": [
             "/api/boundary",
             "/api/flood-extent",
             "/api/statistics",
             "/api/risk-layers",
-            "/api/database/info",
-            "/api/database/search",
+            "/api/geodatabase/summary",
+            "/api/geodatabase/datasets",
             "/api/raster-bounds/{layer}",
             "/api/raster-png/{layer}"
         ]
     }
 
-@app.get("/api/database/info")
-async def get_database_info():
-    """Get file database information"""
-    return {
-        "total_rasters": len(file_db.list_all_rasters()),
-        "total_vectors": len(file_db.list_all_vectors()),
-        "categories": file_db.get_categories(),
-        "last_scan": file_db.db.get('metadata', {}).get('last_scan'),
-        "data_dir": str(file_db.data_dir)
-    }
+@app.get("/api/geodatabase/summary")
+async def get_geodatabase_summary():
+    """Get geodatabase summary"""
+    summary = gdb.get_catalog_summary()
+    return summary
 
-@app.get("/api/database/search")
-async def search_database(category: str = None, pattern: str = None):
-    """Search file database by category or pattern"""
-    if category:
-        results = file_db.search_by_category(category)
-    elif pattern:
-        results = file_db.search_by_pattern(pattern)
-    else:
-        results = {
-            "rasters": file_db.list_all_rasters(),
-            "vectors": file_db.list_all_vectors()
-        }
-    return results
-
-@app.post("/api/database/refresh")
-async def refresh_database():
-    """Refresh the file database by re-scanning"""
-    file_db.refresh()
-    return {
-        "status": "success",
-        "message": "Database refreshed",
-        "total_rasters": len(file_db.list_all_rasters()),
-        "total_vectors": len(file_db.list_all_vectors())
-    }
+@app.get("/api/geodatabase/datasets")
+async def get_all_datasets(dataset_type: str = None, category: str = None):
+    """List all datasets in geodatabase"""
+    datasets = gdb.list_datasets(dataset_type=dataset_type, category=category)
+    return {"datasets": datasets}
 
 @app.get("/api/boundary")
 async def get_city_boundary():
     """Get Fort Myers city boundary as GeoJSON"""
     try:
-        # Use file database to find boundary
-        boundary_files = file_db.search_by_category('boundary')
+        # Get boundary from geodatabase
+        boundary_dataset = gdb.get_dataset("fort_myers_boundary")
         
-        if boundary_files['vectors']:
-            boundary_path = boundary_files['vectors'][0]['path']
-            boundary = gpd.read_file(boundary_path)
+        if boundary_dataset:
+            boundary = gpd.read_file(boundary_dataset['path'])
         else:
-            # Fallback to hardcoded path
+            # Fallback to original path
             boundary = gpd.read_file(CITY_BOUNDARY)
         
         # Convert to WGS84 (EPSG:4326) for web mapping
         boundary_wgs84 = boundary.to_crs("EPSG:4326")
+        
+        # Convert any datetime/timestamp columns to strings to avoid JSON serialization errors
+        for col in boundary_wgs84.columns:
+            if col != 'geometry' and pd.api.types.is_datetime64_any_dtype(boundary_wgs84[col]):
+                boundary_wgs84[col] = boundary_wgs84[col].astype(str)
+        
         return json.loads(boundary_wgs84.to_json())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading boundary: {str(e)}")
 
 @app.get("/api/flood-extent")
 async def get_flood_extent():
-    """Get flood extent as GeoJSON - auto-discovered from database"""
+    """Get flood extent as GeoJSON"""
     try:
-        # Search for flood raster using file database
-        flood_files = file_db.search_by_category('flood')
+        # Get flood raster from geodatabase
+        flood_dataset = gdb.get_dataset("flood_extent_helene_2024")
         
-        if not flood_files['rasters']:
-            raise HTTPException(status_code=404, detail="No flood raster found in database")
-        
-        # Use the first clipped flood file if available
-        flood_raster = None
-        for raster in flood_files['rasters']:
-            if 'clipped' in raster['relative_path']:
-                flood_raster = raster
-                break
-        
-        if not flood_raster:
-            flood_raster = flood_files['rasters'][0]
+        if not flood_dataset:
+            raise HTTPException(status_code=404, detail="Flood dataset not found in geodatabase")
         
         # Read flood raster
-        with rasterio.open(flood_raster['path']) as src:
+        with rasterio.open(flood_dataset['path']) as src:
             flood_data = src.read(1)
             
             # Convert raster to polygons
@@ -161,7 +133,7 @@ async def get_flood_extent():
             flood_polygons = []
             for geom, value in shapes:
                 if value == 1:
-                    flood_polygons.append(geom)
+                    flood_polygons.append(shape(geom))
             
             if not flood_polygons:
                 return {"type": "FeatureCollection", "features": []}
@@ -182,41 +154,66 @@ async def get_flood_extent():
 
 @app.get("/api/statistics")
 async def get_statistics():
-    """Get comprehensive flood exposure statistics"""
+    """Get comprehensive flood exposure statistics from geodatabase"""
     try:
         stats = {}
         
-        # Search for exposure files using database
-        exposure_files = file_db.search_by_category('exposure')
+        # Get exposure statistics
+        exposure_stats = gdb.get_dataset("exposure_statistics")
+        if exposure_stats:
+            df = pd.read_csv(exposure_stats['path'])
+            stats["exposure"] = df.to_dict(orient="records")
+            
+            # Calculate actual flood area from raster if it's 0 in the stats
+            flood_area_stat = df[df['Metric'] == 'Flooded Area']
+            if len(flood_area_stat) > 0:
+                flood_area_km2 = float(flood_area_stat[flood_area_stat['Unit'] == 'square kilometers'].iloc[0]['Value'])
+                
+                # If flood area is 0, calculate it from the raster
+                if flood_area_km2 == 0:
+                    flood_dataset = gdb.get_dataset("flood_extent_helene_2024")
+                    if flood_dataset:
+                        with rasterio.open(flood_dataset['path']) as src:
+                            data = src.read(1)
+                            transform = src.transform
+                            
+                            # Get pixel size in meters
+                            pixel_width = abs(transform[0])
+                            pixel_height = abs(transform[4])
+                            
+                            # Count flood pixels (value = 1)
+                            flood_pixels = np.sum(data == 1)
+                            
+                            # Calculate area
+                            pixel_area_m2 = pixel_width * pixel_height
+                            flood_area_m2 = flood_pixels * pixel_area_m2
+                            flood_area_km2_calculated = flood_area_m2 / 1_000_000
+                            
+                            # Update the stats with calculated values
+                            for item in stats["exposure"]:
+                                if item['Metric'] == 'Flooded Area' and item['Unit'] == 'square kilometers':
+                                    item['Value'] = f"{flood_area_km2_calculated:.4f}"
+                                elif item['Metric'] == 'Flooded Area' and item['Unit'] == 'square meters':
+                                    item['Value'] = f"{flood_area_m2:.2f}"
+                                elif item['Metric'] == 'Pixel Area':
+                                    item['Value'] = f"{pixel_area_m2:.2f}"
+                                elif item['Metric'] == 'Pixel Resolution X':
+                                    item['Value'] = f"{pixel_width:.2f}"
+                                elif item['Metric'] == 'Pixel Resolution Y':
+                                    item['Value'] = f"{pixel_height:.2f}"
         
-        # Read exposure statistics
-        for raster in exposure_files['rasters']:
-            if 'exposure_statistics.csv' in raster['relative_path']:
-                df = pd.read_csv(raster['path'])
-                stats["exposure"] = df.to_dict(orient="records")
-                break
-        
-        # Try direct path if not found via database
-        if "exposure" not in stats:
-            exposure_stats_file = DATA_DIR / "pop_exposure" / "exposure_statistics.csv"
-            if exposure_stats_file.exists():
-                df = pd.read_csv(exposure_stats_file)
-                stats["exposure"] = df.to_dict(orient="records")
-        
-        # Read coverage statistics
-        coverage_stats_file = DATA_DIR / "pop_exposure" / "flood_coverage_statistics.csv"
-        if coverage_stats_file.exists():
-            df = pd.read_csv(coverage_stats_file)
+        # Get coverage statistics
+        coverage_stats = gdb.get_dataset("flood_coverage_statistics")
+        if coverage_stats:
+            df = pd.read_csv(coverage_stats['path'])
             stats["coverage_categories"] = df.to_dict(orient="records")
         
-        # Read G2SFCA statistics for different bandwidths
-        bandwidths = [250, 500, 1000, 2500]
+        # Get G2SFCA statistics for different bandwidths
         stats["g2sfca"] = {}
-        
-        for bw in bandwidths:
-            g2sfca_file = DATA_DIR / "pop_exposure" / f"flood_risk_g2sfca_raster_{bw}m_summary.csv"
-            if g2sfca_file.exists():
-                df = pd.read_csv(g2sfca_file)
+        for bw in [250, 500, 1000, 2500]:
+            g2sfca_dataset = gdb.get_dataset(f"g2sfca_stats_{bw}m")
+            if g2sfca_dataset:
+                df = pd.read_csv(g2sfca_dataset['path'])
                 stats["g2sfca"][f"{bw}m"] = df.to_dict(orient="records")
         
         return stats
@@ -225,74 +222,69 @@ async def get_statistics():
 
 @app.get("/api/risk-layers")
 async def get_risk_layers():
-    """Get available risk analysis layers - auto-discovered from database"""
+    """Get available risk analysis layers from geodatabase"""
     layers = {}
     
-    # Get flood layers
-    flood_files = file_db.search_by_category('flood')
-    for raster in flood_files['rasters']:
-        if raster['relative_path'].endswith('_clipped.tif'):
-            layers['flood'] = {
-                "name": "Flood Extent",
-                "file": raster['path'],
-                "type": "binary",
-                "colormap": "Blues",
-                "metadata": raster
-            }
-            break
+    # Flood layer
+    flood_dataset = gdb.get_dataset("flood_extent_helene_2024")
+    if flood_dataset:
+        layers['flood'] = {
+            "name": "Flood Extent",
+            "file": flood_dataset['path'],
+            "type": "binary",
+            "colormap": "Blues",
+            "description": flood_dataset.get('description', '')
+        }
     
-    # Get population layers
-    pop_files = file_db.search_by_category('population')
-    for raster in pop_files['rasters']:
-        if 'worldpop' in raster['relative_path'].lower():
-            layers['population'] = {
-                "name": "Population Density",
-                "file": raster['path'],
-                "type": "continuous",
-                "colormap": "YlOrRd",
-                "unit": "people/hectare",
-                "metadata": raster
-            }
-            break
+    # Population layer
+    pop_dataset = gdb.get_dataset("population_worldpop")
+    if pop_dataset:
+        layers['population'] = {
+            "name": "Population Density",
+            "file": pop_dataset['path'],
+            "type": "continuous",
+            "colormap": "YlOrRd",
+            "unit": "people/hectare",
+            "description": pop_dataset.get('description', '')
+        }
     
-    # Get exposure layers
-    exposure_files = file_db.search_by_category('exposure')
-    for raster in exposure_files['rasters']:
-        rel_path = raster['relative_path']
-        
-        if 'coverage_rate' in rel_path:
-            layers['exposure'] = {
-                "name": "Flood Coverage Rate",
-                "file": raster['path'],
-                "type": "percentage",
-                "colormap": "Blues",
-                "unit": "%",
-                "metadata": raster
+    # Flood coverage rate
+    coverage_dataset = gdb.get_dataset("flood_coverage_rate")
+    if coverage_dataset:
+        layers['exposure'] = {
+            "name": "Flood Coverage Rate",
+            "file": coverage_dataset['path'],
+            "type": "percentage",
+            "colormap": "Blues",
+            "unit": "%",
+            "description": coverage_dataset.get('description', '')
+        }
+    
+    # Exposed population
+    exposed_dataset = gdb.get_dataset("exposed_population")
+    if exposed_dataset:
+        layers['exposed_population'] = {
+            "name": "Exposed Population",
+            "file": exposed_dataset['path'],
+            "type": "continuous",
+            "colormap": "Reds",
+            "unit": "people/hectare",
+            "description": exposed_dataset.get('description', '')
+        }
+    
+    # G2SFCA risk layers
+    for bw in [250, 500, 1000, 2500]:
+        risk_dataset = gdb.get_dataset(f"g2sfca_risk_{bw}m")
+        if risk_dataset:
+            layers[f'g2sfca_{bw}m'] = {
+                "name": f"G2SFCA Risk ({bw}m)",
+                "file": risk_dataset['path'],
+                "type": "risk_score",
+                "colormap": "RdPu",
+                "bandwidth": bw,
+                "unit": "risk score",
+                "description": risk_dataset.get('description', '')
             }
-        elif 'population_flood_exposure' in rel_path:
-            layers['exposed_population'] = {
-                "name": "Exposed Population",
-                "file": raster['path'],
-                "type": "continuous",
-                "colormap": "Reds",
-                "unit": "people/hectare",
-                "metadata": raster
-            }
-        elif 'g2sfca_raster' in rel_path and not 'distance' in rel_path:
-            # Extract bandwidth from filename
-            import re
-            match = re.search(r'(\d+)m', rel_path)
-            if match:
-                bw = match.group(1)
-                layers[f'g2sfca_{bw}m'] = {
-                    "name": f"G2SFCA Risk ({bw}m)",
-                    "file": raster['path'],
-                    "type": "risk_score",
-                    "colormap": "RdPu",
-                    "bandwidth": int(bw),
-                    "unit": "risk score",
-                    "metadata": raster
-                }
     
     return layers
 
@@ -304,35 +296,24 @@ async def get_raster_bounds(layer: str):
         if layer not in layers:
             raise HTTPException(status_code=404, detail=f"Layer {layer} not found")
         
-        layer_info = layers[layer]
-        metadata = layer_info.get('metadata')
+        raster_file = layers[layer]["file"]
         
-        if metadata:
-            # Use cached metadata from database
+        with rasterio.open(raster_file) as src:
+            bounds = src.bounds
+            bounds_wgs84 = transform_bounds(
+                src.crs,
+                "EPSG:4326",
+                bounds.left, bounds.bottom, bounds.right, bounds.top
+            )
+            
             return {
-                "bounds": metadata['bounds']['wgs84'],
-                "center": metadata['center_wgs84'],
-                "crs": metadata['crs']
+                "bounds": bounds_wgs84,
+                "center": [
+                    (bounds_wgs84[1] + bounds_wgs84[3]) / 2,  # lat
+                    (bounds_wgs84[0] + bounds_wgs84[2]) / 2   # lon
+                ],
+                "crs": str(src.crs)
             }
-        else:
-            # Fallback to reading file
-            raster_file = layer_info["file"]
-            with rasterio.open(raster_file) as src:
-                bounds = src.bounds
-                bounds_wgs84 = transform_bounds(
-                    src.crs,
-                    "EPSG:4326",
-                    bounds.left, bounds.bottom, bounds.right, bounds.top
-                )
-                
-                return {
-                    "bounds": bounds_wgs84,
-                    "center": [
-                        (bounds_wgs84[1] + bounds_wgs84[3]) / 2,
-                        (bounds_wgs84[0] + bounds_wgs84[2]) / 2
-                    ],
-                    "crs": str(src.crs)
-                }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting bounds: {str(e)}")
 
@@ -425,6 +406,10 @@ if __name__ == "__main__":
     else:
         print(f"🔧 Running in DEVELOPMENT mode")
         print(f"⚠️  Frontend should run separately on http://localhost:3000")
+    
+    print(f"📊 File Geodatabase: {gdb.gdb_path}")
+    summary = gdb.get_catalog_summary()
+    print(f"📈 Datasets: {summary['counts']['rasters']} rasters, {summary['counts']['vectors']} vectors, {summary['counts']['tables']} tables")
     
     uvicorn.run(app, host="0.0.0.0", port=8000)
 

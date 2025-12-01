@@ -1,0 +1,133 @@
+{
+  "created": "2025-11-30T18:53:42.604567",
+  "version": "1.0",
+  "description": "Fort Myers Flood Risk Analysis File Geodatabase",
+  "datasets": {
+    "rasters": {
+      "flood_extent_helene_2024": {
+        "category": "flood",
+        "path": "rasters/flood/flood_extent_helene_2024.tif",
+        "description": "Hurricane Helene 2024 flood extent (clipped to Fort Myers)",
+        "added": "2025-11-30T18:53:42.638073"
+      },
+      "population_worldpop": {
+        "category": "population",
+        "path": "rasters/population/population_worldpop.tif",
+        "description": "WorldPop population density for Fort Myers",
+        "added": "2025-11-30T18:53:42.644650"
+      },
+      "flood_coverage_rate": {
+        "category": "exposure",
+        "path": "rasters/exposure/flood_coverage_rate.tif",
+        "description": "Flood coverage rate per 100m grid cell",
+        "added": "2025-11-30T18:53:42.649199"
+      },
+      "exposed_population": {
+        "category": "exposure",
+        "path": "rasters/exposure/exposed_population.tif",
+        "description": "Population exposed to flooding (weighted by coverage)",
+        "added": "2025-11-30T18:53:42.654032"
+      },
+      "g2sfca_risk_250m": {
+        "category": "risk",
+        "path": "rasters/risk/g2sfca_risk_250m.tif",
+        "description": "G2SFCA flood risk assessment (bandwidth=250m)",
+        "added": "2025-11-30T18:53:42.658652"
+      },
+      "flood_distance_250m": {
+        "category": "risk",
+        "path": "rasters/risk/flood_distance_250m.tif",
+        "description": "Distance to nearest flood pixel (bandwidth=250m)",
+        "added": "2025-11-30T18:53:42.663252"
+      },
+      "g2sfca_risk_500m": {
+        "category": "risk",
+        "path": "rasters/risk/g2sfca_risk_500m.tif",
+        "description": "G2SFCA flood risk assessment (bandwidth=500m)",
+        "added": "2025-11-30T18:53:42.667407"
+      },
+      "flood_distance_500m": {
+        "category": "risk",
+        "path": "rasters/risk/flood_distance_500m.tif",
+        "description": "Distance to nearest flood pixel (bandwidth=500m)",
+        "added": "2025-11-30T18:53:42.672138"
+      },
+      "g2sfca_risk_1000m": {
+        "category": "risk",
+        "path": "rasters/risk/g2sfca_risk_1000m.tif",
+        "description": "G2SFCA flood risk assessment (bandwidth=1000m)",
+        "added": "2025-11-30T18:53:42.677137"
+      },
+      "flood_distance_1000m": {
+        "category": "risk",
+        "path": "rasters/risk/flood_distance_1000m.tif",
+        "description": "Distance to nearest flood pixel (bandwidth=1000m)",
+        "added": "2025-11-30T18:53:42.682047"
+      },
+      "g2sfca_risk_2500m": {
+        "category": "risk",
+        "path": "rasters/risk/g2sfca_risk_2500m.tif",
+        "description": "G2SFCA flood risk assessment (bandwidth=2500m)",
+        "added": "2025-11-30T18:53:42.686403"
+      },
+      "flood_distance_2500m": {
+        "category": "risk",
+        "path": "rasters/risk/flood_distance_2500m.tif",
+        "description": "Distance to nearest flood pixel (bandwidth=2500m)",
+        "added": "2025-11-30T18:53:42.690810"
+      }
+    },
+    "vectors": {
+      "fort_myers_boundary": {
+        "category": "boundaries",
+        "path": "vectors/boundaries/fort_myers_boundary.gpkg",
+        "description": "Fort Myers city boundary",
+        "added": "2025-11-30T18:53:43.994449"
+      },
+      "permanent_water": {
+        "category": "boundaries",
+        "path": "vectors/boundaries/permanent_water.gpkg",
+        "description": "Permanent water bodies",
+        "added": "2025-11-30T18:53:44.066378"
+      }
+    },
+    "tables": {
+      "exposure_statistics": {
+        "category": "statistics",
+        "path": "tables/statistics/exposure_statistics.csv",
+        "description": "Overall flood exposure statistics",
+        "added": "2025-11-30T18:53:44.075140"
+      },
+      "flood_coverage_statistics": {
+        "category": "statistics",
+        "path": "tables/statistics/flood_coverage_statistics.csv",
+        "description": "Flood coverage by category",
+        "added": "2025-11-30T18:53:44.079950"
+      },
+      "g2sfca_stats_250m": {
+        "category": "statistics",
+        "path": "tables/statistics/g2sfca_stats_250m.csv",
+        "description": "G2SFCA risk statistics (bandwidth=250m)",
+        "added": "2025-11-30T18:53:44.084628"
+      },
+      "g2sfca_stats_500m": {
+        "category": "statistics",
+        "path": "tables/statistics/g2sfca_stats_500m.csv",
+        "description": "G2SFCA risk statistics (bandwidth=500m)",
+        "added": "2025-11-30T18:53:44.089414"
+      },
+      "g2sfca_stats_1000m": {
+        "category": "statistics",
+        "path": "tables/statistics/g2sfca_stats_1000m.csv",
+        "description": "G2SFCA risk statistics (bandwidth=1000m)",
+        "added": "2025-11-30T18:53:44.093753"
+      },
+      "g2sfca_stats_2500m": {
+        "category": "statistics",
+        "path": "tables/statistics/g2sfca_stats_2500m.csv",
+        "description": "G2SFCA risk statistics (bandwidth=2500m)",
+        "added": "2025-11-30T18:53:44.098110"
+      }
+    }
+  }
+}
