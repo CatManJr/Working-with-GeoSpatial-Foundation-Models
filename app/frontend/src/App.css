@@ -14,6 +14,14 @@
   text-align: center;
   border-bottom: 1px solid #dee2e6;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-content {
+  flex: 1;
+  text-align: center;
 }
 
 .header h1 {
@@ -26,6 +34,32 @@
   margin: 5px 0 0;
   font-size: 1em;
   color: #11548f;
+}
+
+.header-github {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #24292e;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  font-weight: 500;
+  font-size: 0.9em;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  background: #ffffff;
+}
+
+.header-github:hover {
+  color: #0366d6;
+  background: #f6f8fa;
+}
+
+.header-github .github-icon {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
 }
 
 .content {
@@ -613,6 +647,121 @@
 
 .leaflet-popup-content-wrapper {
   border-radius: 8px;
+}
+
+/* Help Button and Modal */
+.help-button {
+  background: #0275d8;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  transition: background-color 0.2s ease;
+  vertical-align: middle;
+}
+
+.help-button:hover {
+  background: #025aa5;
+}
+
+.help-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.help-modal {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.help-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.help-modal-header h3 {
+  margin: 0;
+  font-size: 1.3em;
+  color: #343a40;
+}
+
+.help-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.help-modal-close:hover {
+  background: #f8f9fa;
+  color: #343a40;
+}
+
+.help-modal-content {
+  font-size: 0.95em;
+  color: #495057;
+  line-height: 1.6;
+}
+
+.help-modal-content strong {
+  color: #212529;
+}
+
+.help-modal-content ul {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.help-modal-content li {
+  margin-bottom: 8px;
 }
 
 /* GitHub Attribution - Bottom Right Corner */
