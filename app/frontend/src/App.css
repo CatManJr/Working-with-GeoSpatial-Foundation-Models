@@ -329,9 +329,14 @@
   background: linear-gradient(to right, #fff7f3, #fde0dd, #fcc5c0, #fa9fb5, #f768a1, #dd3497, #ae017e, #7a0177, #49006a);
 }
 
-/* Discrete Influence Zones Colormap */
+/* Discrete Influence Zones Colormap - 4 categories including No Influence */
 .legend-gradient-bar[data-colormap="zones"] {
-  background: linear-gradient(to right, #fc9272 0%, #fc9272 33%, #de2d26 33%, #de2d26 66%, #a50f15 66%, #a50f15 100%);
+  background: linear-gradient(to right, 
+    #f7f7f7 0%, #f7f7f7 25%,     /* No Influence (gray) */
+    #fc9272 25%, #fc9272 50%,    /* Low (light red) */
+    #de2d26 50%, #de2d26 75%,    /* Medium (medium red) */
+    #a50f15 75%, #a50f15 100%    /* High (dark red) */
+  );
   border-left: 1px solid #ddd;
 }
 

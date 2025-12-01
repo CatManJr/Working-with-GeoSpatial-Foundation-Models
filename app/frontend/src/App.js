@@ -437,10 +437,11 @@ function App() {
                         <div className="legend-gradient-container">
                           <div className="legend-gradient-bar" data-colormap={layerInfo.colormap}></div>
                           {isZonesLayer ? (
-                            <div className="legend-range-labels">
-                              <span>Low</span>
-                              <span>Medium</span>
-                              <span>High</span>
+                            <div className="legend-range-labels" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '2px' }}>
+                              <span style={{ fontSize: '0.75em' }}>No</span>
+                              <span style={{ fontSize: '0.75em' }}>Low</span>
+                              <span style={{ fontSize: '0.75em' }}>Med</span>
+                              <span style={{ fontSize: '0.75em' }}>High</span>
                             </div>
                           ) : hasRange && (
                             <div className="legend-range-labels">

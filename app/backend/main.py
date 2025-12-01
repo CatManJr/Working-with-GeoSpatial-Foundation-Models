@@ -413,8 +413,21 @@ async def get_raster_as_png(layer: str, width: int = 800):
     """
     Convert raster to PNG for overlay on web map
     Returns transparent PNG with color mapping
+    
+    Priority: Use pre-generated PNG if exists, otherwise generate on-the-fly
     """
     try:
+        # Check for pre-generated PNG (always 1200px width)
+        png_cache_dir = Path(__file__).parent.parent / "file_database" / "png_cache"
+        cached_png = png_cache_dir / f"{layer}.png"
+        
+        if cached_png.exists():
+            print(f"📦 Serving cached PNG for {layer}")
+            return FileResponse(cached_png, media_type="image/png")
+        
+        # If not cached, generate on-the-fly (development mode)
+        print(f"⚙️  Generating PNG on-the-fly for {layer}")
+        
         layers = await get_risk_layers()
         if layer not in layers:
             raise HTTPException(status_code=404, detail=f"Layer {layer} not found")
@@ -437,24 +450,33 @@ async def get_raster_as_png(layer: str, width: int = 800):
                 p66 = thresholds['p66']
                 
                 # Create classification zones using cached percentiles
-                zones = np.zeros_like(data, dtype=np.uint8)
-                zones[data == 0] = 0  # No influence
+                zones = np.zeros_like(data, dtype=np.float32)
+                zones[data == 0] = 0  # No influence (will be masked)
                 zones[(data > 0) & (data <= p33)] = 1  # Low
                 zones[(data > p33) & (data <= p66)] = 2  # Medium
                 zones[data > p66] = 3  # High
                 
-                # Mask zones
+                # Mask out no-influence areas (zone 0)
                 data = np.ma.masked_where(zones == 0, zones)
                 
-                # Use discrete colormap for zones
-                colors = ['#f7f7f7', '#fc9272', '#de2d26', '#a50f15']
+                # Create discrete colormap for zones (same as accessibility.py)
+                # Using matplotlib ListedColormap like other layers
                 from matplotlib.colors import ListedColormap, BoundaryNorm
+                colors = ['#f7f7f7', '#fc9272', '#de2d26', '#a50f15']
                 cmap = ListedColormap(colors)
-                norm = BoundaryNorm([0.5, 1.5, 2.5, 3.5], cmap.N)
                 
-                # Apply colormap with normalization
-                rgba = cmap(norm(data))
+                # BoundaryNorm to map zone values to colors correctly
+                # Boundaries: [0, 1, 2, 3, 4] to create 4 bins for zones 0-3
+                bounds = [0, 1, 2, 3, 4]
+                norm = BoundaryNorm(bounds, cmap.N)
+                
+                # Apply colormap (same way as other layers)
+                rgba = cmap(norm(data.filled(0)))
+                
+                # Set alpha channel for masked values
                 rgba[:, :, 3] = np.where(data.mask, 0, 0.8)
+                
+                # Convert to uint8
                 rgba_uint8 = (rgba * 255).astype(np.uint8)
                     
             else:
