@@ -23,16 +23,12 @@ WORKDIR /app
 COPY app/backend/ ./app/backend/
 COPY app/file_database/ ./app/file_database/
 
-# 5. Copy other necessary files (if any)
-COPY app/pyproject.toml ./app/ 2>/dev/null || true
-COPY app/README.md ./app/ 2>/dev/null || true
-
-# 6. Expose port (Render uses PORT env var, default 8000)
+# 5. Expose port (Render uses PORT env var, default 8000)
 ENV PORT=8000
 EXPOSE 8000
 
-# 7. Set PYTHONPATH to include the backend directory
+# 6. Set PYTHONPATH to include the backend directory
 ENV PYTHONPATH=/app/app/backend
 
-# 8. Start command
+# 7. Start command
 CMD ["uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
