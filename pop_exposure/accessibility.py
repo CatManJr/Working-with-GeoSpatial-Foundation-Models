@@ -1,5 +1,5 @@
 """
-Calculate flood risk index using adapted G2SFCA method
+Calculate flood influence index using adapted G2SFCA method
 Raster-based implementation for compound flooding scenarios
 Uses euclidean distance for planar spreading in flat coastal areas
 """
@@ -57,11 +57,11 @@ def calculate_distance_raster(flood_mask, pixel_size):
 
 def calculate_g2sfca_raster(pop_raster, flood_raster, bandwidth=500, pixel_size=100):
     """
-    Calculate G2SFCA flood risk using efficient Gaussian filtering
+    Calculate G2SFCA flood influence using efficient Gaussian filtering
     
     This vectorized implementation avoids O(N^2) loops by using:
     1. Gaussian filtering for weighted population summation
-    2. Convolution for risk score calculation
+    2. Convolution for influence score calculation
     
     Args:
         pop_raster: Population density array (people per hectare)
@@ -70,7 +70,7 @@ def calculate_g2sfca_raster(pop_raster, flood_raster, bandwidth=500, pixel_size=
         pixel_size: Raster pixel size in meters (default 100m)
     
     Returns:
-        risk_raster: Flood risk score for each pixel
+        influence_raster: Flood influence score for each pixel
         distance_raster: Distance to nearest flood pixel (for visualization)
     """
     print(f"\nCalculating optimized G2SFCA (bandwidth={bandwidth}m)...")
@@ -107,9 +107,9 @@ def calculate_g2sfca_raster(pop_raster, flood_raster, bandwidth=500, pixel_size=
         # Calculate supply ratio: area / weighted population
         R[valid_flood] = pixel_area / weighted_pop_avg[valid_flood]
     
-    # Step 3: Calculate risk scores via convolution
-    print("  Step 3: Computing risk scores via convolution...")
-    risk_raster = gaussian_filter(
+    # Step 3: Calculate influence scores via convolution
+    print("  Step 3: Computing influence scores via convolution...")
+    influence_raster = gaussian_filter(
         R,
         sigma=sigma_pixels,
         mode='reflect',
@@ -120,12 +120,12 @@ def calculate_g2sfca_raster(pop_raster, flood_raster, bandwidth=500, pixel_size=
     print("  Step 4: Generating distance raster...")
     distance_raster = calculate_distance_raster(flood_raster, pixel_size)
     
-    # Mask risk scores to populated areas only
-    print("  Masking risk scores to populated areas...")
-    risk_raster = np.where(pop_raster > 0, risk_raster, 0.0)
+    # Mask influence scores to populated areas only
+    print("  Masking influence scores to populated areas...")
+    influence_raster = np.where(pop_raster > 0, influence_raster, 0.0)
     
     print("  ✓ G2SFCA calculation complete")
-    return risk_raster, distance_raster
+    return influence_raster, distance_raster
 
 
 def load_and_align_data(pop_raster_path, flood_raster_path):
@@ -248,7 +248,7 @@ def load_and_align_data(pop_raster_path, flood_raster_path):
     return pop_data, flood_data, pop_transform, pop_crs, pop_meta, pixel_size_m
 
 
-def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
+def create_visualization(pop_data, flood_data, influence_raster, distance_raster,
                          transform, crs, bandwidth, output_dir):
     """Create visualizations with Web Mercator coordinates and longitude/latitude labels"""
     print(f"\nCreating visualizations...")
@@ -265,7 +265,7 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
         boundary = None
     
     # Calculate extent in Web Mercator
-    height, width = risk_raster.shape
+    height, width = influence_raster.shape
     
     # Get bounds in original CRS
     left_orig = transform[2]
@@ -333,22 +333,22 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
         cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
         cbar2.set_label('Distance (m)', rotation=270, labelpad=15)
         
-        # Panel C: G2SFCA Risk (right)
+        # Panel C: G2SFCA Influence (right)
         ax3 = axes[2]
-        risk_masked = np.ma.masked_where(risk_raster <= 0, risk_raster)
-        if len(risk_masked.compressed()) > 0:
-            im3 = ax3.imshow(risk_masked, cmap='RdPu', extent=extent,
-                            vmin=0, vmax=np.percentile(risk_masked.compressed(), 98))
+        influence_masked = np.ma.masked_where(influence_raster <= 0, influence_raster)
+        if len(influence_masked.compressed()) > 0:
+            im3 = ax3.imshow(influence_masked, cmap='RdPu', extent=extent,
+                            vmin=0, vmax=np.percentile(influence_masked.compressed(), 98))
             if boundary is not None:
                 boundary.boundary.plot(ax=ax3, color='black', linewidth=1)
-            ax3.set_title('C. G2SFCA Risk Index', fontweight='bold', loc='left')
+            ax3.set_title('C. G2SFCA Influence Index', fontweight='bold', loc='left')
             ax3.set_xlabel('Longitude')
             ax3.set_ylabel('Latitude')
             format_coord_labels(ax3, extent)
             cbar3 = plt.colorbar(im3, ax=ax3, fraction=0.046, pad=0.04)
-            cbar3.set_label('Risk Score', rotation=270, labelpad=15)
+            cbar3.set_label('Influence Score', rotation=270, labelpad=15)
         
-        plt.suptitle(f'G2SFCA Flood Risk Analysis - Fort Myers (Hurricane Helene 2024)\n'
+        plt.suptitle(f'G2SFCA Flood Influence Analysis - Fort Myers (Hurricane Helene 2024)\n'
                      f'Raster-based, Euclidean Distance, Bandwidth={bandwidth}m',
                      fontsize=13, fontweight='bold', y=0.98)
         
@@ -381,29 +381,29 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
         plt.close('all')
         gc.collect()
     
-    # Risk classification
+    # Influence classification
     fig2_success = False
     try:
-        risk_positive = risk_raster[risk_raster > 0]
-        if len(risk_positive) > 0:
+        influence_positive = influence_raster[influence_raster > 0]
+        if len(influence_positive) > 0:
             fig, ax = plt.subplots(figsize=(10, 8))
             
-            p33 = np.percentile(risk_positive, 33)
-            p66 = np.percentile(risk_positive, 66)
+            p33 = np.percentile(influence_positive, 33)
+            p66 = np.percentile(influence_positive, 66)
             
-            risk_zones = np.zeros_like(risk_raster, dtype=np.int8)
-            risk_zones[risk_raster <= 0] = 0
-            risk_zones[(risk_raster > 0) & (risk_raster <= p33)] = 1
-            risk_zones[(risk_raster > p33) & (risk_raster <= p66)] = 2
-            risk_zones[risk_raster > p66] = 3
+            influence_zones = np.zeros_like(influence_raster, dtype=np.int8)
+            influence_zones[influence_raster <= 0] = 0
+            influence_zones[(influence_raster > 0) & (influence_raster <= p33)] = 1
+            influence_zones[(influence_raster > p33) & (influence_raster <= p66)] = 2
+            influence_zones[influence_raster > p66] = 3
             
-            risk_zones_masked = np.ma.masked_where(pop_data <= 0, risk_zones)
+            influence_zones_masked = np.ma.masked_where(pop_data <= 0, influence_zones)
             
             colors = ['#f7f7f7', '#fc9272', '#de2d26', '#a50f15']
-            cmap = LinearSegmentedColormap.from_list('risk', colors, N=4)
+            cmap = LinearSegmentedColormap.from_list('influence', colors, N=4)
             norm = BoundaryNorm([-0.5, 0.5, 1.5, 2.5, 3.5], cmap.N)
             
-            im = ax.imshow(risk_zones_masked, cmap=cmap, norm=norm, extent=extent)
+            im = ax.imshow(influence_zones_masked, cmap=cmap, norm=norm, extent=extent)
             
             if boundary is not None:
                 boundary.boundary.plot(ax=ax, color='black', linewidth=1.5)
@@ -411,12 +411,12 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
             legend = [
                 mpatches.Patch(facecolor=c, edgecolor='black', linewidth=0.5, 
                               label=l) for c, l in zip(colors, 
-                              ['No Risk', 'Low Risk', 'Medium Risk', 'High Risk'])
+                              ['No Influence', 'Low Influence', 'Medium Influence', 'High Influence'])
             ]
-            ax.legend(handles=legend, loc='upper right', title='Risk Category',
+            ax.legend(handles=legend, loc='upper right', title='Influence Category',
                      framealpha=0.95, edgecolor='black')
             
-            ax.set_title(f'Risk Classification (G2SFCA)\nBandwidth={bandwidth}m',
+            ax.set_title(f'Influence Classification (G2SFCA)\nBandwidth={bandwidth}m',
                         fontweight='bold', pad=15)
             ax.set_xlabel('Longitude')
             ax.set_ylabel('Latitude')
@@ -452,7 +452,7 @@ def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
             print(f"  ✓ Saved: {fig2_path}")
             fig2_success = True
         else:
-            print(f"  ⚠ No positive risk values, skipping classification figure")
+            print(f"  ⚠ No positive influence values, skipping classification figure")
     except Exception as e:
         print(f"  ⚠ Error creating classification figure: {e}")
         import traceback
@@ -475,7 +475,7 @@ def run_analysis(bandwidth=500):
     output_dir = ensure_dir(DATA_DIR / "pop_exposure")
     
     print(f"{'='*70}")
-    print(f"G2SFCA FLOOD RISK ANALYSIS (OPTIMIZED)")
+    print(f"G2SFCA FLOOD INFLUENCE ANALYSIS (OPTIMIZED)")
     print(f"{'='*70}")
     print(f"Distance: Euclidean (planar spreading)")
     print(f"Bandwidth: {bandwidth}m")
@@ -488,19 +488,19 @@ def run_analysis(bandwidth=500):
             pop_raster_path, flood_raster_path
         )
         
-        # Calculate G2SFCA risk scores (optimized version)
-        risk_raster, distance_raster = calculate_g2sfca_raster(
+        # Calculate G2SFCA influence scores (optimized version)
+        influence_raster, distance_raster = calculate_g2sfca_raster(
             pop_data, flood_data, bandwidth, pixel_size=pixel_size_m
         )
         
-        # Save risk raster
-        raster_file = output_dir / f"flood_risk_g2sfca_raster_{bandwidth}m.tif"
+        # Save influence raster
+        raster_file = output_dir / f"flood_influence_g2sfca_raster_{bandwidth}m.tif"
         meta.update(dtype=rasterio.float32, nodata=-9999, compress='lzw')
         
         with rasterio.open(raster_file, 'w', **meta) as dst:
-            dst.write(risk_raster.astype(np.float32), 1)
+            dst.write(influence_raster.astype(np.float32), 1)
         
-        print(f"\n✓ Risk raster saved: {raster_file}")
+        print(f"\n✓ Influence raster saved: {raster_file}")
         
         # Save distance raster
         dist_file = output_dir / f"flood_distance_raster_{bandwidth}m.tif"
@@ -511,51 +511,51 @@ def run_analysis(bandwidth=500):
         
         # Calculate statistics
         pop_valid = pop_data > 0
-        risk_positive = risk_raster > 0
+        influence_positive = influence_raster > 0
         
-        # Classify risk
-        risk_values = risk_raster[pop_valid & risk_positive]
-        if len(risk_values) > 0:
-            p33 = np.percentile(risk_values, 33)
-            p66 = np.percentile(risk_values, 66)
+        # Classify influence
+        influence_values = influence_raster[pop_valid & influence_positive]
+        if len(influence_values) > 0:
+            p33 = np.percentile(influence_values, 33)
+            p66 = np.percentile(influence_values, 66)
             
-            low_risk = (risk_raster > 0) & (risk_raster <= p33) & pop_valid
-            med_risk = (risk_raster > p33) & (risk_raster <= p66) & pop_valid
-            high_risk = (risk_raster > p66) & pop_valid
+            low_influence = (influence_raster > 0) & (influence_raster <= p33) & pop_valid
+            med_influence = (influence_raster > p33) & (influence_raster <= p66) & pop_valid
+            high_influence = (influence_raster > p66) & pop_valid
             
             stats_data = {
-                'risk_category': ['Low', 'Medium', 'High'],
+                'influence_category': ['Low', 'Medium', 'High'],
                 'pixel_count': [
-                    np.sum(low_risk),
-                    np.sum(med_risk),
-                    np.sum(high_risk)
+                    np.sum(low_influence),
+                    np.sum(med_influence),
+                    np.sum(high_influence)
                 ],
                 'total_population': [
-                    np.sum(pop_data[low_risk]),
-                    np.sum(pop_data[med_risk]),
-                    np.sum(pop_data[high_risk])
+                    np.sum(pop_data[low_influence]),
+                    np.sum(pop_data[med_influence]),
+                    np.sum(pop_data[high_influence])
                 ],
-                'mean_risk_score': [
-                    np.mean(risk_raster[low_risk]),
-                    np.mean(risk_raster[med_risk]),
-                    np.mean(risk_raster[high_risk])
+                'mean_influence_score': [
+                    np.mean(influence_raster[low_influence]),
+                    np.mean(influence_raster[med_influence]),
+                    np.mean(influence_raster[high_influence])
                 ],
                 'mean_distance_m': [
-                    np.mean(distance_raster[low_risk]),
-                    np.mean(distance_raster[med_risk]),
-                    np.mean(distance_raster[high_risk])
+                    np.mean(distance_raster[low_influence]),
+                    np.mean(distance_raster[med_influence]),
+                    np.mean(distance_raster[high_influence])
                 ]
             }
             
             stats_df = pd.DataFrame(stats_data)
-            stats_file = output_dir / f"flood_risk_g2sfca_raster_{bandwidth}m_summary.csv"
+            stats_file = output_dir / f"flood_influence_g2sfca_raster_{bandwidth}m_summary.csv"
             stats_df.to_csv(stats_file, index=False)
             print(f"✓ Statistics saved: {stats_file}")
         
         # Create visualizations
         try:
             create_visualization(
-                pop_data, flood_data, risk_raster, distance_raster,
+                pop_data, flood_data, influence_raster, distance_raster,
                 transform, crs, bandwidth, output_dir
             )
         except Exception as e:
@@ -569,9 +569,9 @@ def run_analysis(bandwidth=500):
         print(f"{'='*70}")
         total_pop = np.sum(pop_data[pop_valid])
         
-        if len(risk_values) > 0:
+        if len(influence_values) > 0:
             for _, row in stats_df.iterrows():
-                cat = row['risk_category']
+                cat = row['influence_category']
                 pop = row['total_population']
                 pct = pop / total_pop * 100
                 dist = row['mean_distance_m']
@@ -588,7 +588,7 @@ def run_analysis(bandwidth=500):
         print(f"{'='*70}\n")
         print(f"✓ Analysis for bandwidth={bandwidth}m COMPLETE\n")
         
-        return risk_raster, distance_raster
+        return influence_raster, distance_raster
         
     except Exception as e:
         print(f"✗ ERROR in analysis for bandwidth={bandwidth}m: {e}")
@@ -601,7 +601,7 @@ def run_analysis(bandwidth=500):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description='G2SFCA Flood Risk Analysis')
+    parser = argparse.ArgumentParser(description='G2SFCA Flood Influence Analysis')
     parser.add_argument('--bandwidth', type=int, default=500,
                        help='Search radius in meters (default: 500)')
     args = parser.parse_args()
