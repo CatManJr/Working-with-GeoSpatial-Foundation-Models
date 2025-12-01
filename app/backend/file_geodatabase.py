@@ -186,6 +186,9 @@ class FileGeodatabase:
                 bounds.left, bounds.bottom, bounds.right, bounds.top
             )
         
+        # Store relative path in index (relative to gdb_path)
+        relative_path = str(target_path.relative_to(self.gdb_path))
+        
         # Add to index
         conn = sqlite3.connect(self.index_db)
         cursor = conn.cursor()
@@ -194,7 +197,7 @@ class FileGeodatabase:
             (name, category, path, crs, bounds_wgs84, width, height, added_date, description)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            name, category, str(target_path), crs,
+            name, category, relative_path, crs,
             json.dumps(bounds_wgs84), width, height,
             datetime.now().isoformat(), description
         ))
@@ -205,7 +208,7 @@ class FileGeodatabase:
         catalog = self._load_catalog()
         catalog["datasets"]["rasters"][name] = {
             "category": category,
-            "path": str(target_path.relative_to(self.gdb_path)),
+            "path": relative_path,
             "description": description,
             "added": datetime.now().isoformat()
         }
@@ -253,6 +256,9 @@ class FileGeodatabase:
         gdf_wgs84 = gdf.to_crs("EPSG:4326")
         bounds_wgs84 = gdf_wgs84.total_bounds
         
+        # Store relative path in index (relative to gdb_path)
+        relative_path = str(target_path.relative_to(self.gdb_path))
+        
         # Add to index
         conn = sqlite3.connect(self.index_db)
         cursor = conn.cursor()
@@ -261,7 +267,7 @@ class FileGeodatabase:
             (name, category, path, crs, bounds_wgs84, feature_count, geometry_type, added_date, description)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            name, category, str(target_path), crs,
+            name, category, relative_path, crs,
             json.dumps(bounds_wgs84.tolist()), feature_count, geometry_type,
             datetime.now().isoformat(), description
         ))
@@ -272,7 +278,7 @@ class FileGeodatabase:
         catalog = self._load_catalog()
         catalog["datasets"]["vectors"][name] = {
             "category": category,
-            "path": str(target_path.relative_to(self.gdb_path)),
+            "path": relative_path,
             "description": description,
             "added": datetime.now().isoformat()
         }
@@ -308,6 +314,9 @@ class FileGeodatabase:
         target_path = target_dir / f"{name}.csv"
         df.to_csv(target_path, index=False)
         
+        # Store relative path in index (relative to gdb_path)
+        relative_path = str(target_path.relative_to(self.gdb_path))
+        
         # Add to index
         conn = sqlite3.connect(self.index_db)
         cursor = conn.cursor()
@@ -316,7 +325,7 @@ class FileGeodatabase:
             (name, category, path, row_count, column_count, added_date, description)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
-            name, category, str(target_path), len(df), len(df.columns),
+            name, category, relative_path, len(df), len(df.columns),
             datetime.now().isoformat(), description
         ))
         conn.commit()
@@ -326,7 +335,7 @@ class FileGeodatabase:
         catalog = self._load_catalog()
         catalog["datasets"]["tables"][name] = {
             "category": category,
-            "path": str(target_path.relative_to(self.gdb_path)),
+            "path": relative_path,
             "description": description,
             "added": datetime.now().isoformat()
         }
@@ -388,6 +397,21 @@ class FileGeodatabase:
                 conn.close()
                 item = dict(zip(columns, row))
                 item['type'] = table[:-1]
+                
+                # Convert relative path to absolute path
+                if 'path' in item:
+                    stored_path = Path(item['path'])
+                    # If path is relative, resolve it relative to gdb_path
+                    if not stored_path.is_absolute():
+                        item['path'] = str(self.gdb_path / stored_path)
+                    # If path is absolute but doesn't exist, try to resolve it relative to gdb_path
+                    elif not stored_path.exists():
+                        # Extract the relative part (everything after "file_database")
+                        path_str = str(stored_path)
+                        if 'file_database' in path_str:
+                            relative_part = path_str.split('file_database/')[-1]
+                            item['path'] = str(self.gdb_path / relative_part)
+                
                 return item
         
         conn.close()
@@ -423,7 +447,7 @@ def get_geodatabase(gdb_path: Path = None) -> FileGeodatabase:
     """Get or create global geodatabase instance"""
     global _gdb_instance
     
-    if _gdb_instance is None:
+    if (_gdb_instance is None):
         if gdb_path is None:
             # Default path: app/file_database
             gdb_path = Path(__file__).parent.parent / "file_database"

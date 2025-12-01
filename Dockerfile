@@ -5,30 +5,38 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # 1. Install system dependencies and Node.js (for frontend build)
-RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    nodejs \
+    npm \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# 2. Copy and install backend dependencies
-COPY app/backend/requirements.txt ./app/backend/
-RUN pip install --no-cache-dir -r app/backend/requirements.txt
+# 2. Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# 3. Copy and build frontend
-COPY app/frontend/package*.json ./app/frontend/
+# 3. Copy Python project files and install backend dependencies with uv
+COPY app/pyproject.toml app/uv.lock ./app/
+WORKDIR /app/app
+RUN uv sync --frozen --no-dev
+
+# 4. Copy and build frontend
+COPY app/frontend/package*.json ./frontend/
 WORKDIR /app/app/frontend
 RUN npm install
 COPY app/frontend/ ./
 RUN npm run build
 
-# 4. Go back to /app and copy backend code and file_database
+# 5. Go back to /app and copy backend code and file_database
 WORKDIR /app
 COPY app/backend/ ./app/backend/
 COPY app/file_database/ ./app/file_database/
 
-# 5. Expose port (Render uses PORT env var, default 8000)
+# 6. Expose port (Render uses PORT env var, default 8000)
 ENV PORT=8000
 EXPOSE 8000
 
-# 6. Set PYTHONPATH to include the backend directory
+# 7. Set PYTHONPATH to include the backend directory
 ENV PYTHONPATH=/app/app/backend
 
-# 7. Start command
-CMD ["uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 8. Start command using uv run
+CMD ["uv", "run", "--no-dev", "uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
