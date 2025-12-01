@@ -1,6 +1,6 @@
 """
 Extract Inundated Areas
-Extract flood-only areas by removing permanent water and clouds, then clip to Fort Myers boundary
+Extract flood-only areas by removing permanent water, then clip to Fort Myers boundary
 """
 
 import os
@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore')
 
 # Import paths
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from paths import PRITHVI_PREDICTION, PERMANENT_WATER, CITY_BOUNDARY, FLOOD_DIR, ALIGNED_CLOUD
+from paths import PRITHVI_PREDICTION, PERMANENT_WATER, CITY_BOUNDARY, FLOOD_DIR
 
 
 class InundatedAreaExtractor:
@@ -26,14 +26,12 @@ class InundatedAreaExtractor:
     def __init__(
         self,
         predicted_water: str = None,
-        cloud_mask: str = None,
         permanent_water: str = None,
         city_boundary: str = None,
         output_dir: str = None,
     ):
         """Initialize extractor"""
         self.predicted_water_path = Path(predicted_water) if predicted_water else PRITHVI_PREDICTION
-        self.cloud_mask_path = Path(cloud_mask) if cloud_mask else ALIGNED_CLOUD
         self.permanent_water_path = Path(permanent_water) if permanent_water else PERMANENT_WATER
         self.city_boundary_path = Path(city_boundary) if city_boundary else CITY_BOUNDARY
         self.output_dir = Path(output_dir) if output_dir else FLOOD_DIR
@@ -62,41 +60,6 @@ class InundatedAreaExtractor:
         
         return water_mask, profile, transform, crs
     
-    def load_cloud_mask(self, water_profile):
-        """Load and align cloud mask"""
-        print("Loading cloud mask...")
-        
-        with rasterio.open(self.cloud_mask_path) as src:
-            # Check if dimensions match
-            if src.shape != (water_profile['height'], water_profile['width']):
-                print(f"  Warning: Cloud mask shape {src.shape} != water mask shape ({water_profile['height']}, {water_profile['width']})")
-                print(f"  Resampling cloud mask to match water mask...")
-                
-                from rasterio.warp import reproject, Resampling
-                
-                cloud_mask = np.zeros((water_profile['height'], water_profile['width']), dtype=np.uint8)
-                
-                reproject(
-                    source=rasterio.band(src, 1),
-                    destination=cloud_mask,
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=water_profile['transform'],
-                    dst_crs=water_profile['crs'],
-                    resampling=Resampling.nearest
-                )
-            else:
-                cloud_mask = src.read(1)
-        
-        cloud_pixels = np.sum(cloud_mask == 1)
-        total_pixels = cloud_mask.size
-        
-        print(f"  Input: {self.cloud_mask_path}")
-        print(f"  Cloud pixels: {cloud_pixels:,} ({cloud_pixels/total_pixels*100:.2f}%)")
-        print()
-        
-        return cloud_mask
-    
     def rasterize_permanent_water(self, water_profile, transform, crs):
         """Rasterize permanent water shapefile to match water mask"""
         print("Rasterizing permanent water...")
@@ -113,7 +76,6 @@ class InundatedAreaExtractor:
         print(f"  Features: {len(perm_water_gdf)}")
         
         # Rasterize
-        
         shapes_gen = ((geom, 1) for geom in perm_water_gdf.geometry)
         
         perm_water_mask = rasterize(
@@ -132,8 +94,8 @@ class InundatedAreaExtractor:
         
         return perm_water_mask
     
-    def extract_flood_only(self, water_mask, cloud_mask, perm_water_mask):
-        """Extract flood-only areas by removing clouds and permanent water"""
+    def extract_flood_only(self, water_mask, perm_water_mask):
+        """Extract flood-only areas by removing permanent water"""
         print("=" * 80)
         print("Extracting flood-only areas...")
         print("=" * 80)
@@ -141,19 +103,14 @@ class InundatedAreaExtractor:
         # Start with predicted water
         flood_mask = water_mask.copy()
         
-        # Remove clouds (where cloud_mask == 1)
-        clouds_removed = np.sum((flood_mask == 1) & (cloud_mask == 1))
-        flood_mask[(cloud_mask == 1)] = 0
-        
         # Remove permanent water (where perm_water_mask == 1)
         perm_water_removed = np.sum((flood_mask == 1) & (perm_water_mask == 1))
-        flood_mask[(perm_water_mask == 1)] = 0
+        flood_mask[perm_water_mask == 1] = 0
         
         flood_pixels = np.sum(flood_mask == 1)
         total_pixels = flood_mask.size
         
         print(f"  Original water pixels: {np.sum(water_mask == 1):,}")
-        print(f"  Removed clouds: {clouds_removed:,}")
         print(f"  Removed permanent water: {perm_water_removed:,}")
         print(f"  Final flood pixels: {flood_pixels:,} ({flood_pixels/total_pixels*100:.2f}%)")
         print()
@@ -277,19 +234,16 @@ class InundatedAreaExtractor:
         print("Fort Myers Flood-Only Area Extraction")
         print("=" * 80 + "\n")
         
-        # 1. Load predicted water
+        # Load predicted water
         water_mask, profile, transform, crs = self.load_predicted_water()
         
-        # 2. Load cloud mask
-        cloud_mask = self.load_cloud_mask(profile)
-        
-        # 3. Rasterize permanent water
+        # Rasterize permanent water
         perm_water_mask = self.rasterize_permanent_water(profile, transform, crs)
         
-        # 4. Extract flood-only areas
-        flood_mask = self.extract_flood_only(water_mask, cloud_mask, perm_water_mask)
+        # Extract flood-only areas
+        flood_mask = self.extract_flood_only(water_mask, perm_water_mask)
         
-        # 5. Save full flood mask (before clipping)
+        # Save full flood mask (before clipping)
         print("=" * 80)
         print("Saving results...")
         print("=" * 80)
@@ -300,7 +254,7 @@ class InundatedAreaExtractor:
             "FortMyersHelene_2024T269_flood.tif"
         )
         
-        # 6. Clip to Fort Myers boundary
+        # Clip to Fort Myers boundary
         clipped_mask, clipped_profile = self.clip_to_boundary(
             flood_mask,
             profile,
@@ -308,14 +262,14 @@ class InundatedAreaExtractor:
             crs
         )
         
-        # 7. Save clipped flood mask
+        # Save clipped flood mask
         clipped_output = self.save_raster(
             clipped_mask,
             clipped_profile,
             "FortMyersHelene_2024T269_flood_clipped.tif"
         )
         
-        # 8. Vectorize clipped flood areas
+        # Vectorize clipped flood areas
         vector_output = self.vectorize_flood(
             clipped_mask,
             clipped_profile,
@@ -323,7 +277,7 @@ class InundatedAreaExtractor:
         )
         
         print("=" * 80)
-        print("✓ Flood extraction completed!")
+        print("Flood extraction completed!")
         print("=" * 80)
         print(f"  Full flood mask: {full_output}")
         print(f"  Clipped flood mask: {clipped_output}")
@@ -343,7 +297,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Extract flood-only areas (excluding permanent water and clouds)",
+        description="Extract flood-only areas (excluding permanent water)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
@@ -351,12 +305,6 @@ def main():
         "--predicted_water",
         default=None,
         help="Path to predicted water mask"
-    )
-    
-    parser.add_argument(
-        "--cloud_mask",
-        default=None,
-        help="Path to cloud mask"
     )
     
     parser.add_argument(
@@ -382,7 +330,6 @@ def main():
     # Create and run extractor
     extractor = InundatedAreaExtractor(
         predicted_water=args.predicted_water,
-        cloud_mask=args.cloud_mask,
         permanent_water=args.permanent_water,
         city_boundary=args.city_boundary,
         output_dir=args.output_dir,

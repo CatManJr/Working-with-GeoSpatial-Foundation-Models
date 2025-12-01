@@ -131,39 +131,112 @@ def calculate_g2sfca_raster(pop_raster, flood_raster, bandwidth=500, pixel_size=
 def load_and_align_data(pop_raster_path, flood_raster_path):
     """
     Load and align population and flood rasters
+    Both rasters will be reprojected to UTM (projected CRS) for accurate distance calculations
     
     Returns:
-        pop_data, flood_data, transform, crs, meta
+        pop_data, flood_data, transform, crs, meta, pixel_size_m
     """
     print("Loading and aligning raster data...")
     
-    # Load population raster
-    with rasterio.open(pop_raster_path) as src:
-        pop_data = src.read(1)
-        pop_transform = src.transform
-        pop_crs = src.crs
-        pop_shape = src.shape
-        pop_meta = src.meta.copy()
+    # Load flood raster first (reference CRS)
+    with rasterio.open(flood_raster_path) as flood_src:
+        flood_crs = flood_src.crs
+        flood_transform = flood_src.transform
+        flood_data_raw = flood_src.read(1)
         
-        print(f"  Population raster: {pop_shape}, CRS: {pop_crs}")
+        # Ensure flood raster is in projected CRS
+        if flood_crs.is_geographic:
+            print(f"  ⚠ Warning: Flood raster is in geographic CRS, should be projected!")
+            print(f"  Continuing but results may be inaccurate...")
+        
+        print(f"  Flood raster (Reference):")
+        print(f"    File: {flood_raster_path}")
+        print(f"    CRS: {flood_crs}")
+        print(f"    Original shape: {flood_src.shape}")
     
-    # Load flood raster
-    with rasterio.open(flood_raster_path) as src:
-        flood_crs = src.crs
+    # Load population raster and reproject if needed
+    with rasterio.open(pop_raster_path) as pop_src:
+        pop_crs_orig = pop_src.crs
+        pop_bounds = pop_src.bounds
         
-        # Reproject flood to match population grid
-        flood_data = np.empty(pop_shape, dtype=np.float32)
-        reproject(
-            source=rasterio.band(src, 1),
-            destination=flood_data,
-            src_transform=src.transform,
-            src_crs=src.crs,
-            dst_transform=pop_transform,
-            dst_crs=pop_crs,
-            resampling=Resampling.nearest
-        )
+        print(f"  Population raster (Original):")
+        print(f"    File: {pop_raster_path}")
+        print(f"    Original CRS: {pop_crs_orig}")
+        print(f"    Original shape: {pop_src.shape}")
         
-        print(f"  Flood raster reprojected to match population grid")
+        if pop_crs_orig.is_geographic:
+            print(f"  ✓ Reprojecting from {pop_crs_orig} to {flood_crs}...")
+            
+            # Calculate output shape to maintain ~100m resolution
+            from rasterio.warp import calculate_default_transform
+            
+            # Get transform and dimensions for reprojection
+            dst_transform, dst_width, dst_height = calculate_default_transform(
+                pop_crs_orig, flood_crs,
+                pop_src.width, pop_src.height,
+                *pop_bounds,
+                resolution=100  # Target 100m resolution
+            )
+            
+            # Create destination array
+            pop_data = np.empty((dst_height, dst_width), dtype=np.float32)
+            
+            # Reproject population data
+            reproject(
+                source=rasterio.band(pop_src, 1),
+                destination=pop_data,
+                src_transform=pop_src.transform,
+                src_crs=pop_crs_orig,
+                dst_transform=dst_transform,
+                dst_crs=flood_crs,
+                resampling=Resampling.bilinear  # Better for continuous data
+            )
+            
+            pop_transform = dst_transform
+            pop_crs = flood_crs
+            pop_shape = (dst_height, dst_width)
+            pop_meta = pop_src.meta.copy()
+            pop_meta.update({
+                'crs': pop_crs,
+                'transform': pop_transform,
+                'width': dst_width,
+                'height': dst_height
+            })
+            
+            print(f"  ✓ Reprojected to: {pop_crs}")
+            print(f"  New shape: {pop_shape}")
+        else:
+            # Already in projected CRS
+            pop_data = pop_src.read(1)
+            pop_transform = pop_src.transform
+            pop_crs = pop_crs_orig
+            pop_shape = pop_src.shape
+            pop_meta = pop_src.meta.copy()
+            print(f"  Already in projected CRS")
+    
+    # Get pixel size in meters (now guaranteed to be in projected CRS)
+    pixel_size_x = abs(pop_transform[0])
+    pixel_size_y = abs(pop_transform[4])
+    pixel_size_m = (pixel_size_x + pixel_size_y) / 2  # Average
+    
+    print(f"  Population grid (Projected):")
+    print(f"    CRS: {pop_crs}")
+    print(f"    Resolution: {pixel_size_x:.1f}m × {pixel_size_y:.1f}m (avg: {pixel_size_m:.1f}m)")
+    print(f"    Grid size: {pop_shape}")
+    
+    # Reproject flood to match population grid
+    flood_data = np.empty(pop_shape, dtype=np.float32)
+    
+    print(f"  Reprojecting flood data to match population grid...")
+    reproject(
+        source=flood_data_raw,
+        destination=flood_data,
+        src_transform=flood_transform,
+        src_crs=flood_crs,
+        dst_transform=pop_transform,
+        dst_crs=pop_crs,
+        resampling=Resampling.nearest  # Binary data
+    )
     
     # Clean data
     pop_data = np.where(pop_data >= 0, pop_data, 0)
@@ -172,7 +245,7 @@ def load_and_align_data(pop_raster_path, flood_raster_path):
     print(f"  Valid population pixels: {np.sum(pop_data > 0)}")
     print(f"  Flooded pixels: {np.sum(flood_data == 1)}")
     
-    return pop_data, flood_data, pop_transform, pop_crs, pop_meta
+    return pop_data, flood_data, pop_transform, pop_crs, pop_meta, pixel_size_m
 
 
 def create_visualization(pop_data, flood_data, risk_raster, distance_raster,
@@ -411,13 +484,13 @@ def run_analysis(bandwidth=500):
     
     try:
         # Load and align data
-        pop_data, flood_data, transform, crs, meta = load_and_align_data(
+        pop_data, flood_data, transform, crs, meta, pixel_size_m = load_and_align_data(
             pop_raster_path, flood_raster_path
         )
         
         # Calculate G2SFCA risk scores (optimized version)
         risk_raster, distance_raster = calculate_g2sfca_raster(
-            pop_data, flood_data, bandwidth, pixel_size=100
+            pop_data, flood_data, bandwidth, pixel_size=pixel_size_m
         )
         
         # Save risk raster

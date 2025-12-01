@@ -227,51 +227,115 @@ def calculate_exposure():
     print("Method: Calculate flood coverage % for each unit")
     print("="*60)
     
-    # Read population data (100m resolution)
+    # Read flood raster (should be in projected CRS - UTM)
+    with rasterio.open(flood_raster) as flood_src:
+        flood_crs = flood_src.crs
+        flood_data_raw = flood_src.read(1)
+        flood_transform = flood_src.transform
+        flood_bounds = flood_src.bounds
+        
+        # Ensure flood raster is in projected CRS
+        if flood_crs.is_geographic:
+            print("\n⚠ Warning: Flood raster is in geographic CRS, should be projected!")
+            print("  Continuing but results may be inaccurate...")
+        
+        print(f"\nFlood Raster (Reference):")
+        print(f"  File: {flood_raster}")
+        print(f"  CRS: {flood_crs}")
+        print(f"  Resolution: {abs(flood_transform[0]):.1f}m × {abs(flood_transform[4]):.1f}m")
+        print(f"  Grid size: {flood_src.shape}")
+    
+    # Read and reproject population raster to match flood CRS
     with rasterio.open(population_raster) as pop_src:
-        pop_data = pop_src.read(1)
-        pop_transform = pop_src.transform
-        pop_crs = pop_src.crs
-        pop_nodata = pop_src.nodata
+        pop_crs_orig = pop_src.crs
+        pop_transform_orig = pop_src.transform
         
-        print(f"\nPopulation Grid (Community Units):")
-        print(f"  Resolution: {pop_transform[0]:.0f}m × {abs(pop_transform[4]):.0f}m")
-        print(f"  Grid size: {pop_data.shape}")
-        print(f"  Each cell: ~1 hectare (100m × 100m)")
+        print(f"\nPopulation Raster (Original):")
+        print(f"  File: {population_raster}")
+        print(f"  Original CRS: {pop_crs_orig}")
         
-        # Read flood data and calculate coverage rate
-        with rasterio.open(flood_raster) as flood_src:
-            print(f"\nFlood Grid:")
-            print(f"  Resolution: {flood_src.transform[0]:.0f}m × {abs(flood_src.transform[4]):.0f}m")
-            print(f"  Grid size: {flood_src.shape}")
-            print(f"  Sub-grids per 100m unit: 10×10 = 100 cells")
+        if pop_crs_orig.is_geographic:
+            print(f"  ✓ Reprojecting from {pop_crs_orig} to {flood_crs}...")
             
-            # Calculate coverage rate using AVERAGE resampling
-            # This gives us the percentage of each 100m cell that is flooded
-            flood_coverage = np.empty(pop_data.shape, dtype=np.float32)
+            # Calculate output shape to maintain ~100m resolution
+            from rasterio.warp import calculate_default_transform
             
-            print(f"\nCalculating flood coverage rate...")
-            print(f"  Method: Average aggregation (10m → 100m)")
-            
-            reproject(
-                source=rasterio.band(flood_src, 1),
-                destination=flood_coverage,
-                src_transform=flood_src.transform,
-                src_crs=flood_src.crs,
-                dst_transform=pop_transform,
-                dst_crs=pop_crs,
-                resampling=Resampling.average  # Key: gives coverage rate
+            # Get transform and dimensions for reprojection
+            dst_transform, dst_width, dst_height = calculate_default_transform(
+                pop_crs_orig, flood_crs,
+                pop_src.width, pop_src.height,
+                *pop_src.bounds,
+                resolution=100  # Target 100m resolution
             )
+            
+            # Create destination array
+            pop_data = np.empty((dst_height, dst_width), dtype=np.float32)
+            
+            # Reproject population data
+            reproject(
+                source=rasterio.band(pop_src, 1),
+                destination=pop_data,
+                src_transform=pop_src.transform,
+                src_crs=pop_crs_orig,
+                dst_transform=dst_transform,
+                dst_crs=flood_crs,
+                resampling=Resampling.bilinear  # Better for continuous data
+            )
+            
+            pop_transform = dst_transform
+            pop_crs = flood_crs
+            pop_nodata = pop_src.nodata
+            
+            print(f"  ✓ Reprojected to: {pop_crs}")
+            print(f"  New grid size: {pop_data.shape}")
+        else:
+            # Already in projected CRS
+            pop_data = pop_src.read(1)
+            pop_transform = pop_transform_orig
+            pop_crs = pop_crs_orig
+            pop_nodata = pop_src.nodata
+            print(f"  Already in projected CRS")
+    
+    # Get pixel sizes (now both should be in meters)
+    pixel_size_x = abs(pop_transform[0])
+    pixel_size_y = abs(pop_transform[4])
+    pixel_area = pixel_size_x * pixel_size_y
+    
+    print(f"\nPopulation Grid (Projected):")
+    print(f"  CRS: {pop_crs}")
+    print(f"  Resolution: {pixel_size_x:.1f}m × {pixel_size_y:.1f}m")
+    print(f"  Grid size: {pop_data.shape} (height × width)")
+    print(f"  Each cell: {pixel_area:,.0f} m² ({pixel_area/10000:.2f} hectare)")
+    
+    # Reproject flood to match population grid resolution
+    flood_data = np.empty(pop_data.shape, dtype=np.float32)
+    
+    print(f"\nAligning flood data to population grid...")
+    reproject(
+        source=flood_data_raw,
+        destination=flood_data,
+        src_transform=flood_transform,
+        src_crs=flood_crs,
+        dst_transform=pop_transform,
+        dst_crs=pop_crs,
+        resampling=Resampling.average  # Average gives coverage rate
+    )
+    
+    flood_pixel_x = abs(flood_transform[0])
+    flood_pixel_y = abs(flood_transform[4])
+    cells_per_unit = (pixel_size_x / flood_pixel_x) * (pixel_size_y / flood_pixel_y)
+    print(f"  Flood resolution: {flood_pixel_x:.1f}m × {flood_pixel_y:.1f}m")
+    print(f"  Sub-grids per community unit: {pixel_size_x/flood_pixel_x:.1f} × {pixel_size_y/flood_pixel_y:.1f} = {cells_per_unit:.0f} cells")
+    print(f"  Resampling method: Average (gives coverage rate)")
     
     # Data cleaning
     pop_data = np.where(pop_data >= 0, pop_data, 0)
-    flood_coverage = np.clip(flood_coverage, 0, 1)
+    flood_coverage = np.clip(flood_data, 0, 1)  # Coverage rate 0-1
     
     # Valid data mask
     valid_mask = pop_data > 0
     
     # Calculate weighted exposure
-    # Formula: Exposed population = Community population × Flood coverage rate
     exposure_weighted = pop_data * flood_coverage
     
     # Statistics
@@ -280,16 +344,14 @@ def calculate_exposure():
     exposure_percentage = (exposed_population / total_population * 100) if total_population > 0 else 0
     
     # Calculate flooded area
-    pixel_area = abs(pop_transform[0] * pop_transform[4])  # m²
-    # Total flooded area considering coverage rate
     flooded_area_m2 = np.sum(flood_coverage[valid_mask]) * pixel_area
     flooded_area_km2 = flooded_area_m2 / 1_000_000
     
     print(f"\n{'='*60}")
     print(f"FLOOD EXPOSURE ANALYSIS RESULTS")
     print(f"{'='*60}")
-    print(f"Analysis Resolution: {pop_transform[0]:.0f}m × {abs(pop_transform[4]):.0f}m")
-    print(f"Community Unit Area: {pixel_area:,.0f} m² (1 hectare)")
+    print(f"Analysis Resolution: {pixel_size_x:.0f}m × {pixel_size_y:.0f}m")
+    print(f"Community Unit Area: {pixel_area:,.0f} m² ({pixel_area/10000:.2f} hectare)")
     print(f"\nFlooded Area:")
     print(f"  Total flooded area: {flooded_area_m2:,.2f} m² ({flooded_area_km2:.4f} km²)")
     print(f"\nPopulation:")

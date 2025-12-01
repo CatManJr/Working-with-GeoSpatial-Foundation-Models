@@ -1,6 +1,20 @@
-# Fort Myers Hurricane Helene Flood Analysis
+# Working with GeoSpatial Foundation Models
+## Fort Myers Flood Risk Analysis & Dashboard for Hurricane Helene
 
-This project analyzes flood extent from Hurricane Helene in Fort Myers, Florida using satellite imagery and machine learning.
+A comprehensive geospatial analysis system for assessing flood exposure and population risk from Hurricane Helene 2024 in Fort Myers, Florida, using satellite imagery, machine learning-based water segmentation, and spatial accessibility modeling.
+
+## Overview
+
+This project implements an end-to-end workflow for flood risk assessment:
+
+1. **Cloud Reconstruction**: Reconstruct cloud-obscured Sentinel-2 imagery using Sentinel-1 and satellite embeddings
+2. **Water Segmentation**: Detect flood extent using IBM Prithvi foundation model
+3. **Population Exposure**: Calculate exposed population using WorldPop data
+4. **Risk Analysis**: Compute spatial accessibility-based risk scores (G2SFCA method)
+5. **Web Dashboard**: Interactive visualization and UI for the analysis results.
+
+**On CLoud Live Dashboard**: https://two024-hurricane-helene-flood-risk.onrender.com (you may need to wait for seconds to awake the Render server)  
+**Source Code Repository**: https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models
 
 ## Project Structure
 
@@ -8,165 +22,224 @@ This project analyzes flood extent from Hurricane Helene in Fort Myers, Florida 
 Root/
 ├── paths.py                  # Centralized path configuration
 ├── pyproject.toml            # Python dependencies
-├── README.md                 # This file
-├── clean_index.sh            # Call the cleaning script in terminal. Click to run this command
-├── hf_token.txt              # HuggingFace token. Create this file using your own token
-├── utils                     # System-wide utilities
-│   └── clean_._.py/          # Recursively clean the index file on MacOS
+├── Dockerfile                # Container configuration for deployment
+├── clean_index.sh            # MacOS index cleanup utility
 │
-├── data/                     # All data files (download from release page)
-│   ├── raw/                  # Raw satellite data from GEE
-│   ├── processed/            # Processed and reconstructed data
+├── app/                      # Full-stack web application
+│   ├── backend/              # FastAPI backend
+│   │   ├── main.py           # API endpoints
+│   │   ├── file_geodatabase.py  # Spatial data management
+│   │   └── requirements.txt  # Python dependencies
+│   ├── frontend/             # React dashboard
+│   │   └── src/
+│   │       ├── App.js        # Main UI component
+│   │       └── App.css       # Styles
+│   └── file_database/        # Organized geospatial data
+│       ├── rasters/          # Risk layers, population, flood extent
+│       ├── vectors/          # Boundaries, geometries
+│       └── tables/           # Statistics (CSV format)
+│
+├── data/                     # Raw and processed data
+│   ├── raw/                  # Satellite imagery from GEE
+│   ├── processed/            # Cloud-free mosaics
 │   ├── IBM/                  # Prithvi model inputs/outputs
-│   ├── flood/                # Final flood results
-│   ├── NHD/                  # National Hydrology Data
-│   ├── permanent_water/      # Permanent water data from the NHD
-│   ├── Fort_Myers_City_Boundary # Fort Myers City Boundary
-│   └── pop/                  # WorldPop 2024 100m population raster
+│   ├── flood/                # Extracted flood extent
+│   ├── NHD/                  # National Hydrology Dataset
+│   ├── permanent_water/      # Permanent water features
+│   ├── Fort_Myers_City_Boundary/  # Study area boundary
+│   └── pop/                  # WorldPop 2024 (100m resolution)
 │
-├── GEE_script/               # Google Earth Engine scripts
+├── GEE_script/               # Google Earth Engine data acquisition
 │   └── fetch_data.js
 │
-├── reconstruct/              # S2 reconstruction workflow
-│   ├── make_dataset.py       # Build ML dataset
-│   ├── train.py              # Train LightGBM
-│   ├── reconstruct.py        # Reconstruct cloudy pixels
-│   └── viz.py                # Visualize results
+├── reconstruct/              # Cloud removal workflow
+│   ├── make_dataset.py       # Feature engineering for LightGBM
+│   ├── train.py              # Train reconstruction model
+│   ├── train.py              # Plot the regression metrics by bands
+│   ├── reconstruct.py        # Apply model to cloudy pixels
+│   └── viz.py                # Visualization
 │
 ├── water_segmentation/       # Flood detection workflow
-│   ├── prepare_Prithvi.py    # Prepare tiles for Prithvi
-│   └── predict.py            # Run Prithvi inference
+│   ├── prepare_Prithvi.py    # Tile preparation for foundation model
+│   └── predict.py            # Prithvi inference by querying the official demo
 │
-└── flood_extract/            # Flood extraction
-    ├── permanent_water.py    # Extract permanent water
-    └── extract_flood.py      # Extract flood areas
-
+├── flood_extract/            # Post-processing
+│   ├── permanent_water.py    # Extract permanent water from NHD
+│   └── extract_flood.py      # Isolate flood-only pixels
+│
+└── pop_exposure/             # Population exposure analysis
+    ├── clip.py               # Clip population to study area
+    ├── overlay.py            # Calculate exposed population
+    └── accessibility.py      # G2SFCA risk modeling
 ```
 
-## Install
+## Installation
+
+Install dependencies using uv (recommended) or pip:
+
 ```bash
+# Using uv (fast dependency resolver)
 pip install uv
-```
-uv is a tool for managing virtual environments. It's a wrapper around `venv` and `conda`.
+uv sync
 
-```bash
-uv sync # Because I provided the pyproject.toml, you can just run `uv sync`
-```
-
-```bash
-uv add [library] # Use this to add a library to your environment
+# Or using pip
+pip install -r app/backend/requirements.txt
 ```
 
 ## Workflow
 
-### 1. Data Download (GEE)
+### 1. Data Acquisition
+Run `GEE_script/fetch_data.js` in Google Earth Engine Code Editor to download:
+- Sentinel-2 L1C imagery (2024-09-26, Hurricane Helene event)
+- Sentinel-1 GRD backscatter
+- ASTER GDEM elevation
+- Cloud masks
+
+### 2. Cloud Reconstruction
 ```bash
-# Run in Google Earth Engine Code Editor
-# GEE_script/fetch_data.js
+uv run reconstruct/check.py        # Validate input data
+uv run reconstruct/make_dataset.py # Feature engineering
+uv run reconstruct/train.py        # Train LightGBM models
+uv run reconstruct/reconstruct.py  # Reconstruct cloudy pixels
+uv run reconstruct/viz.py          # Generate visualizations
 ```
 
-### 2. Sentinel2 L1C Reconstruction from Sentinel1 GRD and Satellite Embedding V1 (Remove Clouds)
-```bash
-# Check validity of raw files
-uv run reconstruct/check.py
+**Output**: `data/processed/S2_mosaic.tif` (cloud-free composite)
 
-# Build ML dataset
-uv run reconstruct/make_dataset.py
-
-# Train LightGBM models
-uv run reconstruct/train.py
-
-# Reconstruct cloudy pixels
-uv run reconstruct/reconstruct.py
-
-# Visualize results
-uv run reconstruct/viz.py
-```
-
-### 3. Get Permanent Water
+### 3. Permanent Water Extraction
 ```bash
 uv run flood_extract/permanent_water.py
 ```
 
+Extracts permanent water bodies from NHD (National Hydrology Dataset) to isolate flood-only areas.
+
 ### 4. Flood Detection
 ```bash
-# Step 1: Prepare tiles for Prithvi
-uv run water_segmentation/prepare_Prithvi.py
-
-# Step 2: Run Prithvi inference (requires HuggingFace token)
-uv run water_segmentation/predict.py
-
-# Step 3: Extract flood areas
-uv run flood_extract/extract_flood.py
+uv run water_segmentation/prepare_Prithvi.py  # Prepare 224x224 tiles
+uv run water_segmentation/predict.py          # Run Prithvi model
+uv run flood_extract/extract_flood.py         # Extract flood pixels
 ```
 
-### 5. Population Exposure
-Ongoing
+**Output**: 
+- `data/flood/FortMyersHelene_2024T269_flood_clipped.tif` (raster)
+- `data/flood/FortMyersHelene_2024T269_flood_clipped.shp` (vector)
 
-### 6. UI
-Ongoing
-
-## Path Configuration
-
-All scripts now use **centralized path management** via `paths.py`. This means:
-
-### Using Paths in Your Scripts
-
-```python
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from paths import RAW_S2, PROCESSED_DIR, FLOOD_DIR, get_hf_token
-
-# Now use the paths
-print(RAW_S2)  # data/raw/FortMyers_Helene2024_S2.tif
-```
-
-### Key Paths Defined
-
-```python
-# Raw data
-RAW_S2          # data/raw/FortMyers_Helene2024_S2.tif
-RAW_S1          # data/raw/FortMyers_Helene2024_S1.tif
-RAW_AEF         # data/raw/FortMyers_Helene2024_AEF64.tif
-RAW_CLOUD       # data/raw/FortMyers_Helene2024_cloud_mask.tif
-
-# Processed data
-S2_MOSAIC       # data/processed/S2_mosaic.tif (reconstructed)
-LGBM_DIR        # data/processed/lgbm/ (ML datasets)
-
-# Prithvi results
-IBM_TILES_DIR   # data/IBM/tiles_2024T269/
-PRITHVI_PREDICTION  # data/IBM/predict/...inundated.tif
-
-# Flood results
-FLOOD_DIR       # data/flood/
-FLOOD_CLIPPED   # data/flood/...flood_clipped.tif
-```
-
-## Requirements
-
+### 5. Population Exposure Analysis
 ```bash
-# I use uv to manage the virtual environment
-# Install dependencies
-uv sync
+uv run pop_exposure/clip.py        # Clip WorldPop to study area
+uv run pop_exposure/overlay.py     # Calculate exposed population
+uv run pop_exposure/accessibility.py --bandwidth 500  # G2SFCA risk analysis
 ```
-If you do not want to use uv, you can install dependencies manually as listed in `pyproject.toml`.
+
+Generates risk layers at multiple bandwidths (250m, 500m, 1000m, 2500m).
+
+### 6. Web Application
+
+**Development**:
+```bash
+cd app
+./set_up.sh     # Install dependencies
+./run_dev.sh    # Start backend (port 8000) and frontend (port 3000)
+```
+
+**Production**:
+```bash
+./run_prod.sh   # Build frontend and serve with backend
+```
+
+**Deployment**: Application is containerized using Docker and deployed on Render.
+
+## Key Technologies
+
+**Geospatial**: rasterio, geopandas, shapely, GDAL  
+**Machine Learning**: LightGBM, HuggingFace Transformers, IBM Prithvi  
+**Web Stack**: FastAPI, React, Leaflet, Recharts  
+**Deployment**: Docker, Render  
+
+## Configuration
+
+All file paths are centralized in `paths.py`:
+
+```python
+from paths import DATA_DIR, FLOOD_DIR, CITY_BOUNDARY
+
+# Example usage
+flood_raster = FLOOD_DIR / "FortMyersHelene_2024T269_flood_clipped.tif"
+```
+
+Key paths:
+- `RAW_S2`, `RAW_S1`, `RAW_AEF` - Raw satellite data
+- `S2_MOSAIC` - Reconstructed cloud-free mosaic
+- `FLOOD_DIR` - Flood extent outputs
+- `CITY_BOUNDARY` - Fort Myers boundary shapefile
 
 ### HuggingFace Token
-For Prithvi model inference on the cloud, you need a HuggingFace token:
 
-1. Get token from: https://huggingface.co/settings/tokens
-2. Save your hf token to `hf_token.txt` in the project root, OR
-3. Set environment variable: `export HF_TOKEN='your_token'`
+For Prithvi model inference, obtain a token from https://huggingface.co/settings/tokens and either:
+1. Save to `hf_token.txt` in project root, or
+2. Set environment variable: `export HF_TOKEN='your_token'`
 
-Or you could infer locally on Windows or Linux. Please refer to https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11/tree/main
+Alternatively, run inference locally (Windows/Linux) following: https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11
 
 ## Output Files
 
-After running all workflows, you'll have:
+**Cloud Reconstruction**:
+- `data/processed/S2_mosaic.tif` - Cloud-free Sentinel-2 composite
 
-- `data/processed/S2_mosaic.tif` - Cloud-free Sentinel-2 mosaic
-- `data/IBM/predict/FortMyersHelene_2024T269_inundated.tif` - Water detection
-- `data/flood/FortMyersHelene_2024T269_flood_clipped.tif` - Final flood extent (raster)
-- `data/flood/FortMyersHelene_2024T269_flood_clipped.shp` - Final flood extent (vector)
+**Flood Detection**:
+- `data/IBM/predict/FortMyersHelene_2024T269_inundated.tif` - Water segmentation
+- `data/flood/FortMyersHelene_2024T269_flood_clipped.{tif,shp}` - Final flood extent
+
+**Population Exposure**:
+- `data/pop_exposure/flood_risk_g2sfca_raster_{bandwidth}m.tif` - Risk layers
+- `data/pop_exposure/flood_risk_g2sfca_raster_{bandwidth}m_summary.csv` - Statistics
+
+**Web Application Data**:
+- `app/file_database/rasters/` - All raster layers
+- `app/file_database/vectors/` - Boundaries and geometries
+- `app/file_database/tables/` - Statistical summaries
+
+## Submitting Code as Appendix
+
+For academic submissions with page limits, include only core components in the appendix:
+
+**Recommended Appendix Structure** (~1,200 lines total):
+
+```
+Appendix A: Web Application Core (500 lines)
+  A.1 Backend API (app/backend/main.py)
+  A.2 File Geodatabase Manager (app/backend/file_geodatabase.py)
+  A.3 Frontend Dashboard (app/frontend/src/App.js)
+
+Appendix B: Spatial Analysis Algorithms (400 lines)
+  B.1 G2SFCA Risk Model (pop_exposure/accessibility.py)
+  B.2 Population Overlay (pop_exposure/overlay.py)
+
+Appendix C: Data Processing (200 lines)
+  C.1 Cloud Reconstruction (reconstruct/reconstruct.py)
+  C.2 Flood Extraction (flood_extract/extract_flood.py)
+
+Appendix D: Deployment Configuration (100 lines)
+  D.1 Dockerfile
+  D.2 Dependencies (requirements.txt, package.json)
+
+Complete source code (30,000+ lines) available at:
+https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models
+```
+
+**Exclude from appendix**: CSS files, utility scripts, test files, build artifacts, data processing logs.
+
+## Citation
+
+```bibtex
+@software{fortmyers_flood_2024,
+  author = {Your Name},
+  title = {Fort Myers Hurricane Helene Flood Risk Analysis},
+  year = {2024},
+  url = {https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models}
+}
+```
+
+## License
+
+MIT License - See LICENSE file for details.
