@@ -51,8 +51,15 @@ if not PRODUCTION_MODE:
 # Initialize file geodatabase
 gdb = get_geodatabase()
 
-@app.get("/")
+@app.get("/healthz")
+async def healthz():
+    """Health check endpoint for Render"""
+    return {"status": "ok"}
+
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
+    if PRODUCTION_MODE:
+        return FileResponse(FRONTEND_BUILD / "index.html")
     return {
         "message": "Fort Myers Flood Risk Analysis API",
         "version": "2.0.0",
