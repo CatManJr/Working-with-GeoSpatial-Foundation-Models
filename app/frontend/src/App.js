@@ -96,11 +96,19 @@ const LayerTree = ({ layers, selectedLayers, onLayerChange, layerOpacities, onOp
       name: 'Risk Analysis', children: [
         { id: 'exposure', name: 'Flood Coverage Rate (no flood -> fully inundated)' },
         {
-          name: 'G2SFCA Risk (Accessibility to flood)', children: [
+          name: 'G2SFCA Influence (Spatial flood accessibility)', children: [
             { id: 'g2sfca_250m', name: '250m' },
             { id: 'g2sfca_500m', name: '500m' },
             { id: 'g2sfca_1000m', name: '1000m' },
             { id: 'g2sfca_2500m', name: '2500m' },
+          ]
+        },
+        {
+          name: 'Influence Zones (Classified)', children: [
+            { id: 'g2sfca_zones_250m', name: '250m' },
+            { id: 'g2sfca_zones_500m', name: '500m' },
+            { id: 'g2sfca_zones_1000m', name: '1000m' },
+            { id: 'g2sfca_zones_2500m', name: '2500m' },
           ]
         }
       ]
@@ -420,13 +428,21 @@ function App() {
                 {selectedLayers.map(layerId => {
                   if (layerId !== 'flood' && layers[layerId]) {
                     const layerInfo = layers[layerId];
+                    const isZonesLayer = layerInfo.type === 'influence_zones';
                     const hasRange = layerInfo.min !== undefined && layerInfo.max !== undefined;
+                    
                     return (
                       <div className="legend-raster-item" key={layerId}>
                         <div className="legend-raster-header">{layerInfo.name}</div>
                         <div className="legend-gradient-container">
                           <div className="legend-gradient-bar" data-colormap={layerInfo.colormap}></div>
-                          {hasRange && (
+                          {isZonesLayer ? (
+                            <div className="legend-range-labels">
+                              <span>Low</span>
+                              <span>Medium</span>
+                              <span>High</span>
+                            </div>
+                          ) : hasRange && (
                             <div className="legend-range-labels">
                               <span>{layerInfo.min.toFixed(1)}</span>
                               <span>{layerInfo.max.toFixed(1)}</span>
@@ -495,20 +511,20 @@ function App() {
               </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="G2SFCA Risk Assessment">
+            <CollapsibleSection title="G2SFCA Influence Assessment">
               <div style={{ marginBottom: '12px' }}>
                 <span style={{ fontSize: '0.95em', color: '#495057' }}>
-                  Understanding flood risk distribution across different spatial scales
+                  Understanding flood influence distribution across different spatial scales
                 </span>
               </div>
               <div className="bandwidth-grid">
                 {g2sfcaData.map(({ bandwidth, data }) => (
                   <div key={bandwidth} className="bandwidth-card">
                     <h4>Bandwidth: {bandwidth}</h4>
-                    {data && data.map((riskCat, idx) => (
+                    {data && data.map((influenceCat, idx) => (
                       <div key={idx} className="risk-row">
-                        <span className="risk-label">{riskCat.risk_category} Risk</span>
-                        <span className="risk-value">{Math.round(riskCat.total_population).toLocaleString()} people</span>
+                        <span className="risk-label">{influenceCat.influence_category} Influence</span>
+                        <span className="risk-value">{Math.round(influenceCat.total_population).toLocaleString()} people</span>
                       </div>
                     ))}
                   </div>
@@ -546,11 +562,19 @@ function App() {
               <p><strong>Risk Analysis Layers</strong></p>
               <ul>
                 <li><strong>Flood Coverage Rate:</strong> Percentage of each grid cell covered by floodwater (0% = no flood, 100% = fully inundated).</li>
-                <li><strong>G2SFCA Risk (250m-2500m):</strong> Spatial accessibility score measuring flood exposure risk at different search radii—smaller bandwidth identifies local hotspots, larger bandwidth reveals regional patterns.</li>
+                <li><strong>G2SFCA Influence (250m-2500m):</strong> Continuous spatial accessibility scores measuring flood influence using the Gaussian Two-Step Floating Catchment Area method. Smaller bandwidths (250m) capture immediate flood impact, while larger bandwidths (2500m) reveal regional influence patterns. Higher scores indicate greater flood influence on populated areas.</li>
+                <li><strong>Influence Zones (Classified):</strong> Categorical classification of G2SFCA influence scores into three levels:
+                  <ul style={{ marginTop: '8px', marginLeft: '20px' }}>
+                    <li><strong>Low Influence:</strong> Areas in the bottom 33rd percentile of influence scores</li>
+                    <li><strong>Medium Influence:</strong> Areas between 33rd-66th percentile</li>
+                    <li><strong>High Influence:</strong> Areas in the top 33rd percentile (highest flood influence)</li>
+                  </ul>
+                  Use different bandwidths to analyze influence zones at various spatial scales.
+                </li>
               </ul>
 
               <p style={{ marginTop: '16px', fontSize: '0.9em', color: '#6c757d', fontStyle: 'italic' }}>
-                💡 Tip: Toggle multiple layers to compare population distribution with flood risk patterns.
+                💡 Tip: Compare continuous G2SFCA Influence layers with classified Influence Zones to identify both gradual patterns and distinct high-risk areas. Toggle multiple bandwidths to understand multi-scale flood impact.
               </p>
             </div>
           </div>

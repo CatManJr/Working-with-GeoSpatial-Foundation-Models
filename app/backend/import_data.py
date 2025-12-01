@@ -13,8 +13,12 @@ from paths import DATA_DIR
 from file_geodatabase import get_geodatabase
 
 
-def import_all_data():
-    """Import all data from data directory into geodatabase"""
+def import_all_data(clean_first=True):
+    """Import all data from data directory into geodatabase
+    
+    Args:
+        clean_first: If True, remove all existing datasets before importing
+    """
     
     print("=" * 60)
     print("IMPORTING DATA INTO FILE GEODATABASE")
@@ -26,6 +30,48 @@ def import_all_data():
     
     print(f"Geodatabase location: {gdb.gdb_path}")
     print()
+    
+    # Clean existing data if requested
+    if clean_first:
+        print("🗑️  Cleaning existing datasets...")
+        print("-" * 60)
+        
+        import sqlite3
+        import glob
+        
+        # Clear SQLite index
+        conn = sqlite3.connect(gdb.index_db)
+        cursor = conn.cursor()
+        
+        for table in ['rasters', 'vectors', 'tables']:
+            cursor.execute(f"DELETE FROM {table}")
+            print(f"  Cleared {table} index")
+        
+        conn.commit()
+        conn.close()
+        
+        # Clear catalog
+        catalog = gdb._load_catalog()
+        catalog["datasets"] = {
+            "rasters": {},
+            "vectors": {},
+            "tables": {}
+        }
+        gdb._save_catalog(catalog)
+        print(f"  Cleared catalog")
+        
+        # Remove physical files
+        for raster_file in gdb.rasters_dir.rglob("*.tif"):
+            raster_file.unlink()
+            
+        for vector_file in gdb.vectors_dir.rglob("*.gpkg"):
+            vector_file.unlink()
+            
+        for table_file in gdb.tables_dir.rglob("*.csv"):
+            table_file.unlink()
+        
+        print(f"  ✓ Cleaned all existing datasets")
+        print()
     
     # --- Import Rasters ---
     print("Importing Rasters...")
@@ -76,26 +122,33 @@ def import_all_data():
             copy=True  # Changed to True for portability
         )
     
-    # G2SFCA risk rasters
+    # G2SFCA influence rasters (updated naming)
     for bandwidth in [250, 500, 1000, 2500]:
-        risk_file = exposure_dir / f"flood_risk_g2sfca_raster_{bandwidth}m.tif"
-        if risk_file.exists():
+        # Try new naming first (flood_influence_*)
+        influence_file = exposure_dir / f"flood_influence_g2sfca_raster_{bandwidth}m.tif"
+        
+        # Fallback to old naming (flood_risk_*) for backward compatibility
+        if not influence_file.exists():
+            influence_file = exposure_dir / f"flood_risk_g2sfca_raster_{bandwidth}m.tif"
+        
+        if influence_file.exists():
             gdb.import_raster(
-                risk_file,
-                name=f"g2sfca_risk_{bandwidth}m",
-                category="risk",
-                description=f"G2SFCA flood risk assessment (bandwidth={bandwidth}m)",
-                copy=True  # Changed to True for portability
+                influence_file,
+                name=f"g2sfca_influence_{bandwidth}m",
+                category="influence",
+                description=f"G2SFCA flood influence assessment (bandwidth={bandwidth}m)",
+                copy=True
             )
         
+        # Distance raster
         dist_file = exposure_dir / f"flood_distance_raster_{bandwidth}m.tif"
         if dist_file.exists():
             gdb.import_raster(
                 dist_file,
                 name=f"flood_distance_{bandwidth}m",
-                category="risk",
+                category="influence",
                 description=f"Distance to nearest flood pixel (bandwidth={bandwidth}m)",
-                copy=True  # Changed to True for portability
+                copy=True
             )
     
     print()
@@ -152,15 +205,21 @@ def import_all_data():
             description="Flood coverage by category"
         )
     
-    # G2SFCA statistics
+    # G2SFCA statistics (updated naming)
     for bandwidth in [250, 500, 1000, 2500]:
-        g2sfca_stats = exposure_dir / f"flood_risk_g2sfca_raster_{bandwidth}m_summary.csv"
+        # Try new naming first (flood_influence_*)
+        g2sfca_stats = exposure_dir / f"flood_influence_g2sfca_raster_{bandwidth}m_summary.csv"
+        
+        # Fallback to old naming (flood_risk_*) for backward compatibility
+        if not g2sfca_stats.exists():
+            g2sfca_stats = exposure_dir / f"flood_risk_g2sfca_raster_{bandwidth}m_summary.csv"
+        
         if g2sfca_stats.exists():
             gdb.import_table(
                 g2sfca_stats,
                 name=f"g2sfca_stats_{bandwidth}m",
                 category="statistics",
-                description=f"G2SFCA risk statistics (bandwidth={bandwidth}m)"
+                description=f"G2SFCA influence statistics (bandwidth={bandwidth}m)"
             )
     
     print()

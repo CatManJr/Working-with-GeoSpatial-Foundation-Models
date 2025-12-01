@@ -1,13 +1,13 @@
 Metric,Value,Unit
 Analysis Method,Coverage Rate Weighted,method
-Community Unit Size,0,meters
-Pixel Resolution X,0.00,meters
-Pixel Resolution Y,0.00,meters
-Pixel Area,0.00,square meters
-Community Units Analyzed,12032,count
-Units with Any Flood,843,count
-Flooded Area,0.00,square meters
-Flooded Area,0.0000,square kilometers
-Total Population,109173,people
-Exposed Population,6467,people
-Exposure Percentage,5.92,percent
+Community Unit Size,100,meters
+Pixel Resolution X,100.00,meters
+Pixel Resolution Y,100.00,meters
+Pixel Area,10000.00,square meters
+Community Units Analyzed,9279,count
+Units with Any Flood,856,count
+Flooded Area,1238223.42,square meters
+Flooded Area,1.2382,square kilometers
+Total Population,83888,people
+Exposed Population,945,people
+Exposure Percentage,1.13,percent

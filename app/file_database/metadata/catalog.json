@@ -8,73 +8,73 @@
         "category": "flood",
         "path": "rasters/flood/flood_extent_helene_2024.tif",
         "description": "Hurricane Helene 2024 flood extent (clipped to Fort Myers)",
-        "added": "2025-11-30T21:55:01.238839"
+        "added": "2025-12-01T00:45:03.797189"
       },
       "population_worldpop": {
         "category": "population",
         "path": "rasters/population/population_worldpop.tif",
         "description": "WorldPop population density for Fort Myers",
-        "added": "2025-11-30T21:55:01.253324"
+        "added": "2025-12-01T00:45:03.810800"
       },
       "flood_coverage_rate": {
         "category": "exposure",
         "path": "rasters/exposure/flood_coverage_rate.tif",
         "description": "Flood coverage rate per 100m grid cell",
-        "added": "2025-11-30T21:55:01.263875"
+        "added": "2025-12-01T00:45:03.821891"
       },
       "exposed_population": {
         "category": "exposure",
         "path": "rasters/exposure/exposed_population.tif",
         "description": "Population exposed to flooding (weighted by coverage)",
-        "added": "2025-11-30T21:55:01.271814"
+        "added": "2025-12-01T00:45:03.830681"
       },
-      "g2sfca_risk_250m": {
-        "category": "risk",
-        "path": "rasters/risk/g2sfca_risk_250m.tif",
-        "description": "G2SFCA flood risk assessment (bandwidth=250m)",
-        "added": "2025-11-30T21:55:01.277514"
+      "g2sfca_influence_250m": {
+        "category": "influence",
+        "path": "rasters/influence/g2sfca_influence_250m.tif",
+        "description": "G2SFCA flood influence assessment (bandwidth=250m)",
+        "added": "2025-12-01T00:45:03.837598"
       },
       "flood_distance_250m": {
-        "category": "risk",
-        "path": "rasters/risk/flood_distance_250m.tif",
+        "category": "influence",
+        "path": "rasters/influence/flood_distance_250m.tif",
         "description": "Distance to nearest flood pixel (bandwidth=250m)",
-        "added": "2025-11-30T21:55:01.283608"
+        "added": "2025-12-01T00:45:03.844329"
       },
-      "g2sfca_risk_500m": {
-        "category": "risk",
-        "path": "rasters/risk/g2sfca_risk_500m.tif",
-        "description": "G2SFCA flood risk assessment (bandwidth=500m)",
-        "added": "2025-11-30T21:55:01.289114"
+      "g2sfca_influence_500m": {
+        "category": "influence",
+        "path": "rasters/influence/g2sfca_influence_500m.tif",
+        "description": "G2SFCA flood influence assessment (bandwidth=500m)",
+        "added": "2025-12-01T00:45:03.850860"
       },
       "flood_distance_500m": {
-        "category": "risk",
-        "path": "rasters/risk/flood_distance_500m.tif",
+        "category": "influence",
+        "path": "rasters/influence/flood_distance_500m.tif",
         "description": "Distance to nearest flood pixel (bandwidth=500m)",
-        "added": "2025-11-30T21:55:01.294686"
+        "added": "2025-12-01T00:45:03.857290"
       },
-      "g2sfca_risk_1000m": {
-        "category": "risk",
-        "path": "rasters/risk/g2sfca_risk_1000m.tif",
-        "description": "G2SFCA flood risk assessment (bandwidth=1000m)",
-        "added": "2025-11-30T21:55:01.300326"
+      "g2sfca_influence_1000m": {
+        "category": "influence",
+        "path": "rasters/influence/g2sfca_influence_1000m.tif",
+        "description": "G2SFCA flood influence assessment (bandwidth=1000m)",
+        "added": "2025-12-01T00:45:03.864410"
       },
       "flood_distance_1000m": {
-        "category": "risk",
-        "path": "rasters/risk/flood_distance_1000m.tif",
+        "category": "influence",
+        "path": "rasters/influence/flood_distance_1000m.tif",
         "description": "Distance to nearest flood pixel (bandwidth=1000m)",
-        "added": "2025-11-30T21:55:01.306481"
+        "added": "2025-12-01T00:45:03.870784"
       },
-      "g2sfca_risk_2500m": {
-        "category": "risk",
-        "path": "rasters/risk/g2sfca_risk_2500m.tif",
-        "description": "G2SFCA flood risk assessment (bandwidth=2500m)",
-        "added": "2025-11-30T21:55:01.312183"
+      "g2sfca_influence_2500m": {
+        "category": "influence",
+        "path": "rasters/influence/g2sfca_influence_2500m.tif",
+        "description": "G2SFCA flood influence assessment (bandwidth=2500m)",
+        "added": "2025-12-01T00:45:03.877465"
       },
       "flood_distance_2500m": {
-        "category": "risk",
-        "path": "rasters/risk/flood_distance_2500m.tif",
+        "category": "influence",
+        "path": "rasters/influence/flood_distance_2500m.tif",
         "description": "Distance to nearest flood pixel (bandwidth=2500m)",
-        "added": "2025-11-30T21:55:01.317894"
+        "added": "2025-12-01T00:45:03.883695"
       }
     },
     "vectors": {
@@ -82,13 +82,13 @@
         "category": "boundaries",
         "path": "vectors/boundaries/fort_myers_boundary.gpkg",
         "description": "Fort Myers city boundary",
-        "added": "2025-11-30T21:55:01.408649"
+        "added": "2025-12-01T00:45:04.175466"
       },
       "permanent_water": {
         "category": "boundaries",
         "path": "vectors/boundaries/permanent_water.gpkg",
         "description": "Permanent water bodies",
-        "added": "2025-11-30T21:55:01.465170"
+        "added": "2025-12-01T00:45:04.250791"
       }
     },
     "tables": {
@@ -96,37 +96,37 @@
         "category": "statistics",
         "path": "tables/statistics/exposure_statistics.csv",
         "description": "Overall flood exposure statistics",
-        "added": "2025-11-30T21:55:01.470549"
+        "added": "2025-12-01T00:45:04.256977"
       },
       "flood_coverage_statistics": {
         "category": "statistics",
         "path": "tables/statistics/flood_coverage_statistics.csv",
         "description": "Flood coverage by category",
-        "added": "2025-11-30T21:55:01.475492"
+        "added": "2025-12-01T00:45:04.261962"
       },
       "g2sfca_stats_250m": {
         "category": "statistics",
         "path": "tables/statistics/g2sfca_stats_250m.csv",
-        "description": "G2SFCA risk statistics (bandwidth=250m)",
-        "added": "2025-11-30T21:55:01.480050"
+        "description": "G2SFCA influence statistics (bandwidth=250m)",
+        "added": "2025-12-01T00:45:04.266696"
       },
       "g2sfca_stats_500m": {
         "category": "statistics",
         "path": "tables/statistics/g2sfca_stats_500m.csv",
-        "description": "G2SFCA risk statistics (bandwidth=500m)",
-        "added": "2025-11-30T21:55:01.484859"
+        "description": "G2SFCA influence statistics (bandwidth=500m)",
+        "added": "2025-12-01T00:45:04.271490"
       },
       "g2sfca_stats_1000m": {
         "category": "statistics",
         "path": "tables/statistics/g2sfca_stats_1000m.csv",
-        "description": "G2SFCA risk statistics (bandwidth=1000m)",
-        "added": "2025-11-30T21:55:01.489636"
+        "description": "G2SFCA influence statistics (bandwidth=1000m)",
+        "added": "2025-12-01T00:45:04.277134"
       },
       "g2sfca_stats_2500m": {
         "category": "statistics",
         "path": "tables/statistics/g2sfca_stats_2500m.csv",
-        "description": "G2SFCA risk statistics (bandwidth=2500m)",
-        "added": "2025-11-30T21:55:01.493979"
+        "description": "G2SFCA influence statistics (bandwidth=2500m)",
+        "added": "2025-12-01T00:45:04.282717"
       }
     }
   }

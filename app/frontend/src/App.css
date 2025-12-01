@@ -329,6 +329,12 @@
   background: linear-gradient(to right, #fff7f3, #fde0dd, #fcc5c0, #fa9fb5, #f768a1, #dd3497, #ae017e, #7a0177, #49006a);
 }
 
+/* Discrete Influence Zones Colormap */
+.legend-gradient-bar[data-colormap="zones"] {
+  background: linear-gradient(to right, #fc9272 0%, #fc9272 33%, #de2d26 33%, #de2d26 66%, #a50f15 66%, #a50f15 100%);
+  border-left: 1px solid #ddd;
+}
+
 .legend-box {
   width: 15px;
   height: 15px;

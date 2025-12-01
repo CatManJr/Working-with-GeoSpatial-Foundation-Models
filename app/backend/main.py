@@ -51,6 +51,48 @@ if not PRODUCTION_MODE:
 # Initialize file geodatabase
 gdb = get_geodatabase()
 
+# Cache for influence zone thresholds (percentiles)
+# Format: {layer_id: {'p33': value, 'p66': value}}
+INFLUENCE_ZONE_THRESHOLDS = {}
+
+def precompute_influence_zone_thresholds():
+    """
+    Precompute percentile thresholds for all G2SFCA influence layers
+    Called once at startup to avoid repeated calculations
+    """
+    print("\n🔄 Precomputing influence zone thresholds...")
+    
+    for bw in [250, 500, 1000, 2500]:
+        # Try new naming first (g2sfca_influence_*)
+        influence_dataset = gdb.get_dataset(f"g2sfca_influence_{bw}m")
+        
+        # Fallback to old naming (g2sfca_risk_*) for backward compatibility
+        if not influence_dataset:
+            influence_dataset = gdb.get_dataset(f"g2sfca_risk_{bw}m")
+        
+        if influence_dataset:
+            try:
+                with rasterio.open(influence_dataset['path']) as src:
+                    data = src.read(1)
+                    valid_data = data[data > 0]
+                    
+                    if len(valid_data) > 0:
+                        p33 = float(np.percentile(valid_data, 33))
+                        p66 = float(np.percentile(valid_data, 66))
+                        
+                        layer_id = f"g2sfca_zones_{bw}m"
+                        INFLUENCE_ZONE_THRESHOLDS[layer_id] = {
+                            'p33': p33,
+                            'p66': p66,
+                            'file': influence_dataset['path']
+                        }
+                        
+                        print(f"  ✓ {layer_id}: p33={p33:.6f}, p66={p66:.6f}")
+            except Exception as e:
+                print(f"  ✗ Error processing {bw}m: {e}")
+    
+    print(f"✓ Precomputed thresholds for {len(INFLUENCE_ZONE_THRESHOLDS)} zone layers\n")
+
 @app.get("/healthz")
 async def healthz():
     """Health check endpoint for Render"""
@@ -297,21 +339,42 @@ async def get_risk_layers():
             "description": exposed_dataset.get('description', '')
         }
     
-    # G2SFCA risk layers
+    # G2SFCA influence layers (from geodatabase)
     for bw in [250, 500, 1000, 2500]:
-        risk_dataset = gdb.get_dataset(f"g2sfca_risk_{bw}m")
-        if risk_dataset:
-            vmin, vmax = get_raster_stats(risk_dataset['path'])
+        # Try new naming first (g2sfca_influence_*)
+        influence_dataset = gdb.get_dataset(f"g2sfca_influence_{bw}m")
+        
+        # Fallback to old naming (g2sfca_risk_*) for backward compatibility
+        if not influence_dataset:
+            influence_dataset = gdb.get_dataset(f"g2sfca_risk_{bw}m")
+        
+        if influence_dataset:
+            vmin, vmax = get_raster_stats(influence_dataset['path'])
+            
+            # Continuous influence layer
             layers[f'g2sfca_{bw}m'] = {
-                "name": f"G2SFCA Risk ({bw}m)",
-                "file": risk_dataset['path'],
-                "type": "risk_score",
+                "name": f"G2SFCA Influence ({bw}m)",
+                "file": influence_dataset['path'],
+                "type": "influence_score",
                 "colormap": "RdPu",
                 "bandwidth": bw,
-                "unit": "risk score",
+                "unit": "influence score",
                 "min": vmin,
                 "max": vmax,
-                "description": risk_dataset.get('description', '')
+                "description": f"G2SFCA flood influence score at {bw}m bandwidth"
+            }
+            
+            # Classified zones layer (uses same file, classified on-the-fly)
+            layers[f'g2sfca_zones_{bw}m'] = {
+                "name": f"Influence Zones ({bw}m)",
+                "file": influence_dataset['path'],
+                "type": "influence_zones",
+                "colormap": "zones",
+                "bandwidth": bw,
+                "unit": "category",
+                "min": 0,
+                "max": 3,
+                "description": f"Classified influence zones (Low/Medium/High) at {bw}m bandwidth"
             }
     
     return layers
@@ -358,67 +421,100 @@ async def get_raster_as_png(layer: str, width: int = 800):
         
         raster_file = layers[layer]["file"]
         layer_info = layers[layer]
+        layer_type = layer_info.get("type", "continuous")
         
         with rasterio.open(raster_file) as src:
             data = src.read(1)
             
-            # Mask invalid data
-            if layer == "flood":
-                data = np.ma.masked_where(data == 0, data)
-            elif layer in ["population", "exposed_population"]:
-                data = np.ma.masked_where(data <= 0, data)
-            else:
-                data = np.ma.masked_where(data <= 0, data)
-            
-            # Create colormap
-            cmap_name = layer_info.get("colormap", "viridis")
-            
-            if cmap_name == "Blues":
-                cmap = plt.cm.Blues
-            elif cmap_name == "YlOrRd":
-                cmap = plt.cm.YlOrRd
-            elif cmap_name == "Reds":
-                cmap = plt.cm.Reds
-            elif cmap_name == "RdPu":
-                cmap = plt.cm.RdPu
-            else:
-                cmap = plt.cm.viridis
-            
-            # Normalize data
-            if len(data.compressed()) > 0:
-                vmin = 0
-                vmax = np.percentile(data.compressed(), 98)
+            # Special handling for influence zones - use precomputed thresholds
+            if layer_type == "influence_zones":
+                # Use cached thresholds instead of recalculating
+                if layer not in INFLUENCE_ZONE_THRESHOLDS:
+                    raise HTTPException(status_code=404, detail=f"Thresholds not found for {layer}")
                 
-                # Normalize to 0-1
-                data_norm = (data - vmin) / (vmax - vmin)
-                data_norm = np.clip(data_norm, 0, 1)
+                thresholds = INFLUENCE_ZONE_THRESHOLDS[layer]
+                p33 = thresholds['p33']
+                p66 = thresholds['p66']
                 
-                # Apply colormap
-                rgba = cmap(data_norm)
+                # Create classification zones using cached percentiles
+                zones = np.zeros_like(data, dtype=np.uint8)
+                zones[data == 0] = 0  # No influence
+                zones[(data > 0) & (data <= p33)] = 1  # Low
+                zones[(data > p33) & (data <= p66)] = 2  # Medium
+                zones[data > p66] = 3  # High
                 
-                # Set alpha channel for masked values
-                rgba[:, :, 3] = np.where(data.mask, 0, 0.7)
+                # Mask zones
+                data = np.ma.masked_where(zones == 0, zones)
                 
-                # Convert to uint8
+                # Use discrete colormap for zones
+                colors = ['#f7f7f7', '#fc9272', '#de2d26', '#a50f15']
+                from matplotlib.colors import ListedColormap, BoundaryNorm
+                cmap = ListedColormap(colors)
+                norm = BoundaryNorm([0.5, 1.5, 2.5, 3.5], cmap.N)
+                
+                # Apply colormap with normalization
+                rgba = cmap(norm(data))
+                rgba[:, :, 3] = np.where(data.mask, 0, 0.8)
                 rgba_uint8 = (rgba * 255).astype(np.uint8)
-                
-                # Create PIL Image
-                img = Image.fromarray(rgba_uint8, mode='RGBA')
-                
-                # Resize if needed
-                if width != data.shape[1]:
-                    aspect_ratio = data.shape[0] / data.shape[1]
-                    height = int(width * aspect_ratio)
-                    img = img.resize((width, height), Image.LANCZOS)
-                
-                # Save to bytes
-                img_bytes = BytesIO()
-                img.save(img_bytes, format='PNG')
-                img_bytes.seek(0)
-                
-                return Response(content=img_bytes.read(), media_type="image/png")
+                    
             else:
-                raise HTTPException(status_code=404, detail="No valid data in raster")
+                # Standard continuous data rendering
+                if layer == "flood":
+                    data = np.ma.masked_where(data == 0, data)
+                elif layer in ["population", "exposed_population"]:
+                    data = np.ma.masked_where(data <= 0, data)
+                else:
+                    data = np.ma.masked_where(data <= 0, data)
+                
+                # Create colormap
+                cmap_name = layer_info.get("colormap", "viridis")
+                
+                if cmap_name == "Blues":
+                    cmap = plt.cm.Blues
+                elif cmap_name == "YlOrRd":
+                    cmap = plt.cm.YlOrRd
+                elif cmap_name == "Reds":
+                    cmap = plt.cm.Reds
+                elif cmap_name == "RdPu":
+                    cmap = plt.cm.RdPu
+                else:
+                    cmap = plt.cm.viridis
+                
+                # Normalize data
+                if len(data.compressed()) > 0:
+                    vmin = 0
+                    vmax = np.percentile(data.compressed(), 98)
+                    
+                    # Normalize to 0-1
+                    data_norm = (data - vmin) / (vmax - vmin)
+                    data_norm = np.clip(data_norm, 0, 1)
+                    
+                    # Apply colormap
+                    rgba = cmap(data_norm)
+                    
+                    # Set alpha channel for masked values
+                    rgba[:, :, 3] = np.where(data.mask, 0, 0.7)
+                    
+                    # Convert to uint8
+                    rgba_uint8 = (rgba * 255).astype(np.uint8)
+                else:
+                    raise HTTPException(status_code=404, detail="No valid data in raster")
+            
+            # Create PIL Image
+            img = Image.fromarray(rgba_uint8, mode='RGBA')
+            
+            # Resize if needed
+            if width != data.shape[1]:
+                aspect_ratio = data.shape[0] / data.shape[1]
+                height = int(width * aspect_ratio)
+                img = img.resize((width, height), Image.LANCZOS)
+            
+            # Save to bytes
+            img_bytes = BytesIO()
+            img.save(img_bytes, format='PNG')
+            img_bytes.seek(0)
+            
+            return Response(content=img_bytes.read(), media_type="image/png")
                 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating PNG: {str(e)}")
@@ -462,6 +558,8 @@ if __name__ == "__main__":
     summary = gdb.get_catalog_summary()
     print(f"📈 Datasets: {summary['counts']['rasters']} rasters, {summary['counts']['vectors']} vectors, {summary['counts']['tables']} tables")
     
+    precompute_influence_zone_thresholds()
+    
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 def main():
@@ -470,6 +568,20 @@ def main():
         pass
     else:
         import uvicorn
+        
+        print(f"File Geodatabase: {gdb.gdb_path}")
+        summary = gdb.get_catalog_summary()
+        print(f"Datasets: {summary['counts']['rasters']} rasters, {summary['counts']['vectors']} tables")
+        
+        # Precompute influence zone thresholds
+        precompute_influence_zone_thresholds()
+        
         if PRODUCTION_MODE:
             app.mount("/", StaticFiles(directory=str(FRONTEND_BUILD), html=True), name="frontend")
+            print(f"Running in PRODUCTION mode")
+            print(f"Serving frontend from: {FRONTEND_BUILD}")
+        else:
+            print(f"Running in DEVELOPMENT mode")
+            print(f"⚠️  Frontend should run separately on http://localhost:3000")
+        
         uvicorn.run(app, host="0.0.0.0", port=8000)
