@@ -9,7 +9,7 @@ Development: API only with CORS enabled for separate React dev server
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 import rasterio
 from rasterio.warp import transform_bounds
@@ -411,6 +411,29 @@ async def get_raster_as_png(layer: str, width: int = 800):
                 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating PNG: {str(e)}")
+
+# Serve React App in Production
+if PRODUCTION_MODE:
+    # 1. Mount static assets (JS, CSS, etc.)
+    # Check if static folder exists to avoid errors if build is partial
+    static_dir = FRONTEND_BUILD / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    # 2. Catch-all route for SPA (must be last)
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        # Skip API routes (just in case, though they are defined above)
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+            
+        # Check if file exists in build root (e.g. favicon.ico, manifest.json)
+        file_path = FRONTEND_BUILD / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+            
+        # Otherwise return index.html for React Router to handle
+        return FileResponse(FRONTEND_BUILD / "index.html")
 
 if __name__ == "__main__":
     import uvicorn
