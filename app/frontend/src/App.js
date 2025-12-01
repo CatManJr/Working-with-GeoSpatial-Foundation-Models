@@ -8,7 +8,8 @@ import {
 import 'leaflet/dist/leaflet.css';
 import './App.css';
 
-const API_BASE = 'http://localhost:8000';
+// Use relative path in production, localhost in development
+const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000';
 
 // Basemap options
 const BASEMAPS = {

@@ -18,16 +18,21 @@ RUN npm install
 COPY app/frontend/ ./
 RUN npm run build
 
-# 4. Copy remaining code (including backend code and file_database)
+# 4. Go back to /app and copy backend code and file_database
 WORKDIR /app
-COPY . .
+COPY app/backend/ ./app/backend/
+COPY app/file_database/ ./app/file_database/
 
-# 5. Expose port (Render uses PORT env var, default 8000)
+# 5. Copy other necessary files (if any)
+COPY app/pyproject.toml ./app/ 2>/dev/null || true
+COPY app/README.md ./app/ 2>/dev/null || true
+
+# 6. Expose port (Render uses PORT env var, default 8000)
 ENV PORT=8000
 EXPOSE 8000
 
-# 6. Start command
-# Note: We run the backend, which now also serves the frontend
-# Set PYTHONPATH to include the backend directory so modules can be found
+# 7. Set PYTHONPATH to include the backend directory
 ENV PYTHONPATH=/app/app/backend
+
+# 8. Start command
 CMD ["uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
