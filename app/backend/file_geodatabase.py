@@ -447,10 +447,24 @@ def get_geodatabase(gdb_path: Path = None) -> FileGeodatabase:
     """Get or create global geodatabase instance"""
     global _gdb_instance
     
-    if (_gdb_instance is None):
+    if _gdb_instance is None:
         if gdb_path is None:
-            # Default path: app/file_database
-            gdb_path = Path(__file__).parent.parent / "file_database"
+            # Default path: Try multiple possible locations
+            # 1. app/file_database (relative to backend directory)
+            # 2. /app/app/file_database (absolute path in container)
+            backend_dir = Path(__file__).parent
+            
+            # Try relative path first
+            gdb_path = backend_dir.parent / "file_database"
+            
+            # If not found, try absolute path in container
+            if not gdb_path.exists():
+                gdb_path = Path("/app/app/file_database")
+            
+            # If still not found, try current working directory
+            if not gdb_path.exists():
+                gdb_path = Path.cwd() / "file_database"
+        
         _gdb_instance = FileGeodatabase(gdb_path)
     
     return _gdb_instance
