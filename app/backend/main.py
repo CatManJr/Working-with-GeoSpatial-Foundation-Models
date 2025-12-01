@@ -51,48 +51,6 @@ if not PRODUCTION_MODE:
 # Initialize file geodatabase
 gdb = get_geodatabase()
 
-# Cache for influence zone thresholds (percentiles)
-# Format: {layer_id: {'p33': value, 'p66': value}}
-INFLUENCE_ZONE_THRESHOLDS = {}
-
-def precompute_influence_zone_thresholds():
-    """
-    Precompute percentile thresholds for all G2SFCA influence layers
-    Called once at startup to avoid repeated calculations
-    """
-    print("\n🔄 Precomputing influence zone thresholds...")
-    
-    for bw in [250, 500, 1000, 2500]:
-        # Try new naming first (g2sfca_influence_*)
-        influence_dataset = gdb.get_dataset(f"g2sfca_influence_{bw}m")
-        
-        # Fallback to old naming (g2sfca_risk_*) for backward compatibility
-        if not influence_dataset:
-            influence_dataset = gdb.get_dataset(f"g2sfca_risk_{bw}m")
-        
-        if influence_dataset:
-            try:
-                with rasterio.open(influence_dataset['path']) as src:
-                    data = src.read(1)
-                    valid_data = data[data > 0]
-                    
-                    if len(valid_data) > 0:
-                        p33 = float(np.percentile(valid_data, 33))
-                        p66 = float(np.percentile(valid_data, 66))
-                        
-                        layer_id = f"g2sfca_zones_{bw}m"
-                        INFLUENCE_ZONE_THRESHOLDS[layer_id] = {
-                            'p33': p33,
-                            'p66': p66,
-                            'file': influence_dataset['path']
-                        }
-                        
-                        print(f"  ✓ {layer_id}: p33={p33:.6f}, p66={p66:.6f}")
-            except Exception as e:
-                print(f"  ✗ Error processing {bw}m: {e}")
-    
-    print(f"✓ Precomputed thresholds for {len(INFLUENCE_ZONE_THRESHOLDS)} zone layers\n")
-
 @app.get("/healthz")
 async def healthz():
     """Health check endpoint for Render"""
@@ -413,21 +371,9 @@ async def get_raster_as_png(layer: str, width: int = 800):
     """
     Convert raster to PNG for overlay on web map
     Returns transparent PNG with color mapping
-    
-    Priority: Use pre-generated PNG if exists, otherwise generate on-the-fly
+    Fully dynamic rendering for all layers
     """
     try:
-        # Check for pre-generated PNG (always 1200px width)
-        png_cache_dir = Path(__file__).parent.parent / "file_database" / "png_cache"
-        cached_png = png_cache_dir / f"{layer}.png"
-        
-        if cached_png.exists():
-            print(f"📦 Serving cached PNG for {layer}")
-            return FileResponse(cached_png, media_type="image/png")
-        
-        # If not cached, generate on-the-fly (development mode)
-        print(f"⚙️  Generating PNG on-the-fly for {layer}")
-        
         layers = await get_risk_layers()
         if layer not in layers:
             raise HTTPException(status_code=404, detail=f"Layer {layer} not found")
@@ -439,17 +385,19 @@ async def get_raster_as_png(layer: str, width: int = 800):
         with rasterio.open(raster_file) as src:
             data = src.read(1)
             
-            # Special handling for influence zones - use precomputed thresholds
+            # Special handling for influence zones - dynamically calculate percentiles
             if layer_type == "influence_zones":
-                # Use cached thresholds instead of recalculating
-                if layer not in INFLUENCE_ZONE_THRESHOLDS:
-                    raise HTTPException(status_code=404, detail=f"Thresholds not found for {layer}")
+                # Calculate percentiles on-the-fly (same as other layers)
+                valid_data = data[data > 0]
                 
-                thresholds = INFLUENCE_ZONE_THRESHOLDS[layer]
-                p33 = thresholds['p33']
-                p66 = thresholds['p66']
+                if len(valid_data) == 0:
+                    raise HTTPException(status_code=404, detail="No valid data in raster")
                 
-                # Create classification zones using cached percentiles
+                # Calculate 33rd and 66th percentiles
+                p33 = float(np.percentile(valid_data, 33))
+                p66 = float(np.percentile(valid_data, 66))
+                
+                # Create classification zones
                 zones = np.zeros_like(data, dtype=np.float32)
                 zones[data == 0] = 0  # No influence (will be masked)
                 zones[(data > 0) & (data <= p33)] = 1  # Low
@@ -460,17 +408,15 @@ async def get_raster_as_png(layer: str, width: int = 800):
                 data = np.ma.masked_where(zones == 0, zones)
                 
                 # Create discrete colormap for zones (same as accessibility.py)
-                # Using matplotlib ListedColormap like other layers
                 from matplotlib.colors import ListedColormap, BoundaryNorm
                 colors = ['#f7f7f7', '#fc9272', '#de2d26', '#a50f15']
                 cmap = ListedColormap(colors)
                 
                 # BoundaryNorm to map zone values to colors correctly
-                # Boundaries: [0, 1, 2, 3, 4] to create 4 bins for zones 0-3
                 bounds = [0, 1, 2, 3, 4]
                 norm = BoundaryNorm(bounds, cmap.N)
                 
-                # Apply colormap (same way as other layers)
+                # Apply colormap
                 rgba = cmap(norm(data.filled(0)))
                 
                 # Set alpha channel for masked values
@@ -580,8 +526,6 @@ if __name__ == "__main__":
     summary = gdb.get_catalog_summary()
     print(f"📈 Datasets: {summary['counts']['rasters']} rasters, {summary['counts']['vectors']} vectors, {summary['counts']['tables']} tables")
     
-    precompute_influence_zone_thresholds()
-    
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 def main():
@@ -594,9 +538,6 @@ def main():
         print(f"File Geodatabase: {gdb.gdb_path}")
         summary = gdb.get_catalog_summary()
         print(f"Datasets: {summary['counts']['rasters']} rasters, {summary['counts']['vectors']} tables")
-        
-        # Precompute influence zone thresholds
-        precompute_influence_zone_thresholds()
         
         if PRODUCTION_MODE:
             app.mount("/", StaticFiles(directory=str(FRONTEND_BUILD), html=True), name="frontend")
