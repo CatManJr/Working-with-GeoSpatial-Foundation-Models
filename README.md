@@ -1,20 +1,23 @@
 # Working with GeoSpatial Foundation Models
 ## Fort Myers Flood Risk Analysis & Dashboard for Hurricane Helene
 
-A comprehensive geospatial analysis system for assessing flood exposure and population risk from Hurricane Helene 2024 in Fort Myers, Florida, using satellite imagery, machine learning-based water segmentation, and spatial accessibility modeling.
+This is a hands-on project for myself to practice building a full-circle machine learning system combining `cloud computing`, `ML`, `foundation models`, `spatial analysis`, `full-stack development`, and `CI/CD`. Due to finacial concern, I put the web dashboard (source code in `/app`) on the Render rather than my AWS or Azure containers, and you can find the address below. The step by step prcessing pipeline (see below) is not on cloud becase I can't afford AWS EC2. Overall, this repo contains a ML pipeline from fetching data on GEE, traning and predcting, querying Foundation Model inference, to spatial analysis; and a Docker contained web app as the results dash board.
 
 ## Overview
 
 This project implements an end-to-end workflow for flood risk assessment:
 
-1. **Cloud Reconstruction**: Reconstruct cloud-obscured Sentinel-2 imagery using Sentinel-1 and satellite embeddings
-2. **Water Segmentation**: Detect flood extent using IBM Prithvi foundation model
-3. **Population Exposure**: Calculate exposed population using WorldPop data
-4. **Risk Analysis**: Compute spatial accessibility-based risk scores (G2SFCA method)
-5. **Web Dashboard**: Interactive visualization and UI for the analysis results.
+1. **Cloud/Shadow Reconstruction**: Reconstruct cloud-obscured Sentinel-2 imagery using Sentinel-1 GRD and Satellite Embeddings V1 (AlphaEarth Foundations). The pipeline of Cloud Reconstruction is train a LightGBM regression tree model, to predict the Sentinel-2 L1C (Band 2,3,4,8,11,12) by Sentinel-1 GRD (as short term reference) and Satellite Embeddings V1 (as long term reference). The average R-squared is above 0.85, without adjusting hyperparameters.
+   
+2. **Water Segmentation**: Segment water pixels using IBM/NASA Prithvi-EO-2.0-300M-TL-Sen1Floods11 foundation model. Because the model can not run on MacOS, I queried the official demo, which exposed a inference API, to do this task. Permenant water pixels are merged and selected by both NHDArea and NHDWaterbody in Fort Myers. And the flood pixels are defined as: `Segment water pixels - Permenant water pixels`.
 
-**On CLoud Live Dashboard**: https://two024-hurricane-helene-flood-risk.onrender.com (you may need to wait for seconds to awake the Render server)  
-**Source Code Repository**: https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models
+3. **Population Exposure**: Calculate exposed (inundated) population using WorldPop data
+4. **Risk Analysis**: Compute spatial accessibility-based risk (influence) scores (G2SFCA method). Totally 4 band width: 250m, 500m, 1000m, 2500m, tosimulate the spread of the surface water.
+
+5. **Web Dashboard**: Interactive visualization and UI for the analysis results. The server only has 0.1 CPU and 512 RAM. Be careful when srollng. And youmay need to wait for several minutes to wake up the app. The wed app can fetch the latest ML pipeline output when offline. The fetched data will be stored in [/app/file_database](https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models/tree/main/app/file_database), and the FastAPI backend can fetch the data here using Python's sqlite3. The forntend is build on React (Javascript).
+
+**Cloud dashboard**: https://two024-hurricane-helene-flood-risk.onrender.com (you may need to wait for seconds to awake the Render server)  
+**Source Code Repository (This repo)**: https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models
 
 ## Project Structure
 
