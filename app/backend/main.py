@@ -95,6 +95,9 @@ async def get_city_boundary():
         # Get boundary from geodatabase
         boundary_dataset = gdb.get_dataset("fort_myers_boundary")
         
+        if not boundary_dataset:
+            raise HTTPException(status_code=404, detail="Boundary dataset not found in geodatabase")
+        
         if boundary_dataset:
             boundary = gpd.read_file(boundary_dataset['path'])
         else:
@@ -103,13 +106,14 @@ async def get_city_boundary():
         # Convert to WGS84 (EPSG:4326) for web mapping
         boundary_wgs84 = boundary.to_crs("EPSG:4326")
         
-        # Convert any datetime/timestamp columns to strings to avoid JSON serialization errors
-        for col in boundary_wgs84.columns:
-            if col != 'geometry' and pd.api.types.is_datetime64_any_dtype(boundary_wgs84[col]):
-                boundary_wgs84[col] = boundary_wgs84[col].astype(str)
+        # Simplify: only keep geometry, drop all other columns to avoid serialization issues
+        boundary_simple = boundary_wgs84[['geometry']].copy()
         
-        return json.loads(boundary_wgs84.to_json())
+        return json.loads(boundary_simple.to_json())
     except Exception as e:
+        import traceback
+        error_detail = f"Error loading boundary: {str(e)}\n{traceback.format_exc()}"
+        print(error_detail)  # Log to console
         raise HTTPException(status_code=500, detail=f"Error loading boundary: {str(e)}")
 
 @app.get("/api/flood-extent")
