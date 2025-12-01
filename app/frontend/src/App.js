@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, GeoJSON, ImageOverlay } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, ImageOverlay, ScaleControl } from 'react-leaflet';
 import axios from 'axios';
 import {
   BarChart, Bar,
@@ -105,6 +105,49 @@ const LayerTree = ({ layers, selectedLayers, onLayerChange }) => {
       <ul>
         {layerConfig.map(item => item.children ? renderGroup(item) : renderLayer(item))}
       </ul>
+    </div>
+  );
+};
+
+const LayerControls = ({ children }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  return (
+    <div className={`layer-controls ${isCollapsed ? 'collapsed' : ''}`}>
+      <div className="layer-controls-header">
+        <h3>{isCollapsed ? '' : 'Layers'}</h3>
+        <button 
+          className="layer-controls-toggle"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          title={isCollapsed ? 'Expand' : 'Collapse'}
+        >
+          {isCollapsed ? '☰' : '✕'}
+        </button>
+      </div>
+      <div className="layer-controls-content">
+        {!isCollapsed && children}
+      </div>
+    </div>
+  );
+};
+
+const CollapsibleSection = ({ title, children, defaultExpanded = true }) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  return (
+    <div className="collapsible-section">
+      <div 
+        className="collapsible-header" 
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <h3>{title}</h3>
+        <span className={`collapsible-arrow ${isExpanded ? 'expanded' : ''}`}>▼</span>
+      </div>
+      {isExpanded && (
+        <div className="collapsible-content">
+          {children}
+        </div>
+      )}
     </div>
   );
 };
@@ -221,9 +264,9 @@ function App() {
 
       <div className="content">
         <div className="map-panel">
-          <div className="layer-controls">
+          <LayerControls>
             <div className="control-group">
-              <h3>Base Map</h3>
+              <h4>Base Map</h4>
               <select 
                 className="layer-select"
                 value={selectedBasemap}
@@ -236,20 +279,21 @@ function App() {
             </div>
             
             <div className="control-group">
-              <h3>Data Layers</h3>
+              <h4>Data Layers</h4>
               <LayerTree 
                 layers={layers}
                 selectedLayers={selectedLayers}
                 onLayerChange={handleLayerChange}
               />
             </div>
-          </div>
+          </LayerControls>
 
           <MapContainer center={center} zoom={zoom} style={{ height: '100%', width: '100%' }}>
             <TileLayer
               attribution={currentBasemap.attribution}
               url={currentBasemap.url}
             />
+            <ScaleControl position="bottomright" imperial={true} metric={true} />
             
             {boundary && (
               <GeoJSON 
@@ -291,27 +335,50 @@ function App() {
 
           <div className="map-legend">
             <h4>Legend</h4>
-            <div className="legend-item">
-              <div className="legend-line" style={{ borderColor: '#d9534f', borderStyle: 'dashed' }}></div>
-              <span>City Boundary</span>
-            </div>
-            {selectedLayers.includes('flood') && (
+            <div className="legend-section">
+              <h5>Boundaries</h5>
               <div className="legend-item">
-                <div className="legend-box" style={{ backgroundColor: 'rgba(2, 117, 216, 0.6)' }}></div>
-                <span>Flood Extent</span>
+                <div className="legend-line" style={{ borderColor: '#d9534f', borderStyle: 'dashed' }}></div>
+                <span>City Boundary</span>
+              </div>
+            </div>
+
+            {selectedLayers.includes('flood') && (
+              <div className="legend-section">
+                <h5>Flood Data</h5>
+                <div className="legend-item">
+                  <div className="legend-box" style={{ backgroundColor: 'rgba(2, 117, 216, 0.6)' }}></div>
+                  <span>Flood Extent</span>
+                </div>
               </div>
             )}
-            {selectedLayers.map(layerId => {
-               if (layerId !== 'flood' && layers[layerId]) {
-                 return (
-                  <div className="legend-item" key={layerId}>
-                    <div className="legend-gradient" data-colormap={layers[layerId].colormap}></div>
-                    <span>{layers[layerId].name}</span>
-                  </div>
-                 )
-               }
-               return null;
-            })}
+
+            {selectedLayers.some(id => id !== 'flood' && layers[id]) && (
+              <div className="legend-section">
+                <h5>Analysis Layers</h5>
+                {selectedLayers.map(layerId => {
+                  if (layerId !== 'flood' && layers[layerId]) {
+                    const layerInfo = layers[layerId];
+                    const hasRange = layerInfo.min !== undefined && layerInfo.max !== undefined;
+                    return (
+                      <div className="legend-raster-item" key={layerId}>
+                        <div className="legend-raster-header">{layerInfo.name}</div>
+                        <div className="legend-gradient-container">
+                          <div className="legend-gradient-bar" data-colormap={layerInfo.colormap}></div>
+                          {hasRange && (
+                            <div className="legend-range-labels">
+                              <span>{layerInfo.min.toFixed(1)}</span>
+                              <span>{layerInfo.max.toFixed(1)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+                  return null;
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -324,58 +391,64 @@ function App() {
             {isStatsPanelCollapsed ? '❮' : '❯'}
           </button>
 
-          <h2>Key Metrics</h2>
-          
-          <div className="metrics-grid">
-            <div className="metric-card">
-              <div className="metric-label">Total Population</div>
-              <div className="metric-value">{totalPop.toLocaleString()}</div>
-            </div>
+          <div className="stats-content">
+            <h2>Analysis Report</h2>
             
-            <div className="metric-card danger">
-              <div className="metric-label">Exposed Population</div>
-              <div className="metric-value">{exposedPop.toLocaleString()}</div>
-            </div>
-            
-            <div className="metric-card warning">
-              <div className="metric-label">Exposure Rate</div>
-              <div className="metric-value">{exposureRate.toFixed(1)}%</div>
-            </div>
-            
-            <div className="metric-card info">
-              <div className="metric-label">Flood Area</div>
-              <div className="metric-value">{floodArea.toFixed(1)} km²</div>
-            </div>
-          </div>
+            <CollapsibleSection title="Key Metrics">
+              <div className="metrics-grid">
+                <div className="metric-card">
+                  <div className="metric-label">Total Population</div>
+                  <div className="metric-value">{totalPop.toLocaleString()}</div>
+                </div>
+                
+                <div className="metric-card danger">
+                  <div className="metric-label">Exposed Population</div>
+                  <div className="metric-value">{exposedPop.toLocaleString()}</div>
+                </div>
+                
+                <div className="metric-card warning">
+                  <div className="metric-label">Exposure Rate</div>
+                  <div className="metric-value">{exposureRate.toFixed(1)}%</div>
+                </div>
+                
+                <div className="metric-card info">
+                  <div className="metric-label">Flood Area</div>
+                  <div className="metric-value">{floodArea.toFixed(1)} km²</div>
+                </div>
+              </div>
+            </CollapsibleSection>
 
-          <h3>Population by Coverage Category</h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={coverageData} margin={{ top: 5, right: 20, left: 10, bottom: 70 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} />
-                <YAxis />
-                <Tooltip />
-                <Legend verticalAlign="top" />
-                <Bar dataKey="population" fill="#5bc0de" name="Total" />
-                <Bar dataKey="exposed" fill="#f0ad4e" name="Exposed" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+            <CollapsibleSection title="Population by Coverage Category">
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={coverageData} margin={{ top: 5, right: 20, left: 10, bottom: 70 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend verticalAlign="top" />
+                    <Bar dataKey="population" fill="#5bc0de" name="Total" />
+                    <Bar dataKey="exposed" fill="#f0ad4e" name="Exposed" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CollapsibleSection>
 
-          <h3>G2SFCA Risk Assessment</h3>
-          <div className="bandwidth-grid">
-            {g2sfcaData.map(({ bandwidth, data }) => (
-              <div key={bandwidth} className="bandwidth-card">
-                <h4>Bandwidth: {bandwidth}</h4>
-                {data && data.map((riskCat, idx) => (
-                  <div key={idx} className="risk-row">
-                    <span className="risk-label">{riskCat.risk_category} Risk</span>
-                    <span className="risk-value">{Math.round(riskCat.total_population).toLocaleString()} people</span>
+            <CollapsibleSection title="G2SFCA Risk Assessment">
+              <div className="bandwidth-grid">
+                {g2sfcaData.map(({ bandwidth, data }) => (
+                  <div key={bandwidth} className="bandwidth-card">
+                    <h4>Bandwidth: {bandwidth}</h4>
+                    {data && data.map((riskCat, idx) => (
+                      <div key={idx} className="risk-row">
+                        <span className="risk-label">{riskCat.risk_category} Risk</span>
+                        <span className="risk-value">{Math.round(riskCat.total_population).toLocaleString()} people</span>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
-            ))}
+            </CollapsibleSection>
           </div>
         </div>
       </div>

@@ -23,12 +23,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from shapely.geometry import shape
-import sys
 import os
-
-# Add parent directory to path to import paths.py
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from paths import DATA_DIR, CITY_BOUNDARY
 
 # Import file geodatabase
 from file_geodatabase import get_geodatabase
@@ -96,8 +91,7 @@ async def get_city_boundary():
         if boundary_dataset:
             boundary = gpd.read_file(boundary_dataset['path'])
         else:
-            # Fallback to original path
-            boundary = gpd.read_file(CITY_BOUNDARY)
+            raise HTTPException(status_code=404, detail="Boundary dataset not found in geodatabase")
         
         # Convert to WGS84 (EPSG:4326) for web mapping
         boundary_wgs84 = boundary.to_crs("EPSG:4326")
@@ -225,6 +219,17 @@ async def get_risk_layers():
     """Get available risk analysis layers from geodatabase"""
     layers = {}
     
+    # Helper to get min/max
+    def get_raster_stats(path):
+        try:
+            with rasterio.open(path) as src:
+                data = src.read(1, masked=True)
+                if data.count() > 0:
+                    return float(data.min()), float(data.max())
+        except:
+            pass
+        return 0.0, 0.0
+
     # Flood layer
     flood_dataset = gdb.get_dataset("flood_extent_helene_2024")
     if flood_dataset:
@@ -239,36 +244,45 @@ async def get_risk_layers():
     # Population layer
     pop_dataset = gdb.get_dataset("population_worldpop")
     if pop_dataset:
+        vmin, vmax = get_raster_stats(pop_dataset['path'])
         layers['population'] = {
             "name": "Population Density",
             "file": pop_dataset['path'],
             "type": "continuous",
             "colormap": "YlOrRd",
             "unit": "people/hectare",
+            "min": vmin,
+            "max": vmax,
             "description": pop_dataset.get('description', '')
         }
     
     # Flood coverage rate
     coverage_dataset = gdb.get_dataset("flood_coverage_rate")
     if coverage_dataset:
+        vmin, vmax = get_raster_stats(coverage_dataset['path'])
         layers['exposure'] = {
             "name": "Flood Coverage Rate",
             "file": coverage_dataset['path'],
             "type": "percentage",
             "colormap": "Blues",
             "unit": "%",
+            "min": vmin,
+            "max": vmax,
             "description": coverage_dataset.get('description', '')
         }
     
     # Exposed population
     exposed_dataset = gdb.get_dataset("exposed_population")
     if exposed_dataset:
+        vmin, vmax = get_raster_stats(exposed_dataset['path'])
         layers['exposed_population'] = {
             "name": "Exposed Population",
             "file": exposed_dataset['path'],
             "type": "continuous",
             "colormap": "Reds",
             "unit": "people/hectare",
+            "min": vmin,
+            "max": vmax,
             "description": exposed_dataset.get('description', '')
         }
     
@@ -276,6 +290,7 @@ async def get_risk_layers():
     for bw in [250, 500, 1000, 2500]:
         risk_dataset = gdb.get_dataset(f"g2sfca_risk_{bw}m")
         if risk_dataset:
+            vmin, vmax = get_raster_stats(risk_dataset['path'])
             layers[f'g2sfca_{bw}m'] = {
                 "name": f"G2SFCA Risk ({bw}m)",
                 "file": risk_dataset['path'],
@@ -283,6 +298,8 @@ async def get_risk_layers():
                 "colormap": "RdPu",
                 "bandwidth": bw,
                 "unit": "risk score",
+                "min": vmin,
+                "max": vmax,
                 "description": risk_dataset.get('description', '')
             }
     
