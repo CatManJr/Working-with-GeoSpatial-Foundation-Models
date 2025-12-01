@@ -614,3 +614,47 @@
 .leaflet-popup-content-wrapper {
   border-radius: 8px;
 }
+
+/* GitHub Attribution - Bottom Right Corner */
+.github-attribution {
+  position: absolute;
+  bottom: 30px;
+  right: 20px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px 15px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  font-size: 0.85em;
+  border: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.github-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #24292e;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  font-weight: 500;
+}
+
+.github-link:hover {
+  color: #0366d6;
+}
+
+.github-icon {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.author-info {
+  color: #586069;
+  font-size: 0.9em;
+  text-align: right;
+  font-style: italic;
+}
