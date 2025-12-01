@@ -93,10 +93,10 @@ pip install -r app/backend/requirements.txt
 
 ### 1. Data Acquisition
 Run `GEE_script/fetch_data.js` in Google Earth Engine Code Editor to download:
-- Sentinel-2 L1C imagery (2024-09-26, Hurricane Helene event)
-- Sentinel-1 GRD backscatter
-- ASTER GDEM elevation
-- Cloud masks
+- [Sentinel-2 L1C (2024-09-21 - 2024-09-29, Hurricane Helene event)](https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S2_HARMONIZED)
+- [Sentinel-1 SAR GRD (2024-09-21 - 2024-09-29, Hurricane Helene event)](https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S1_GRD)
+- [GOOGLE_SATELLITE_EMBEDDING_V1_ANNUAL (Only 2024)](https://developers.google.com/earth-engine/datasets/catalog/GOOGLE_SATELLITE_EMBEDDING_V1_ANNUAL?hl=zh-cn#description)
+- [Cloud masks (contains shadow)](https://developers.google.com/earth-engine/datasets/catalog/GOOGLE_CLOUD_SCORE_PLUS_V1_S2_HARMONIZED)
 
 ### 2. Cloud Reconstruction
 ```bash
