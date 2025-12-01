@@ -135,6 +135,32 @@
   cursor: pointer;
 }
 
+.layer-item {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+
+.layer-header {
+  display: flex;
+  align-items: center;
+}
+
+.layer-opacity-control {
+  margin-top: 5px;
+  padding-left: 22px; /* Align with checkbox text */
+  padding-right: 5px;
+  display: flex;
+  align-items: center;
+}
+
+.layer-opacity-control input[type="range"] {
+  width: 100%;
+  height: 4px;
+  accent-color: #007bff;
+  cursor: pointer;
+}
+
 /* Map Legend */
 .map-legend {
   position: absolute;
@@ -216,6 +242,19 @@
   color: #555;
   margin-top: 3px;
   font-family: 'Roboto Mono', monospace; /* Monospace for numbers looks technical */
+  width: 100%;
+}
+
+.legend-range-labels span {
+  flex: 1;
+}
+
+.legend-range-labels span:first-child {
+  text-align: left;
+}
+
+.legend-range-labels span:last-child {
+  text-align: right;
 }
 
 /* Colormaps */

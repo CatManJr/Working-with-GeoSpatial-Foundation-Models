@@ -39,7 +39,7 @@ const BASEMAPS = {
   }
 };
 
-const LayerTree = ({ layers, selectedLayers, onLayerChange }) => {
+const LayerTree = ({ layers, selectedLayers, onLayerChange, layerOpacities, onOpacityChange }) => {
   const [openGroups, setOpenGroups] = useState({
     'Population': true,
     'Risk Analysis': true,
@@ -50,17 +50,38 @@ const LayerTree = ({ layers, selectedLayers, onLayerChange }) => {
     setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
   };
 
-  const renderLayer = (layer) => (
-    <li key={layer.id}>
-      <label>
-        <input
-          type="checkbox"
-          checked={selectedLayers.includes(layer.id)}
-          onChange={() => onLayerChange(layer.id)}
-        /> {layer.name}
-      </label>
-    </li>
-  );
+  const renderLayer = (layer) => {
+    const currentOpacity = layerOpacities[layer.id] !== undefined 
+      ? layerOpacities[layer.id] 
+      : (layer.id === 'flood' ? 0.5 : 0.7);
+      
+    return (
+      <li key={layer.id} className="layer-item">
+        <div className="layer-header">
+          <label>
+            <input
+              type="checkbox"
+              checked={selectedLayers.includes(layer.id)}
+              onChange={() => onLayerChange(layer.id)}
+            /> {layer.name}
+          </label>
+        </div>
+        {selectedLayers.includes(layer.id) && (
+          <div className="layer-opacity-control">
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={currentOpacity}
+              onChange={(e) => onOpacityChange(layer.id, parseFloat(e.target.value))}
+              title={`Opacity: ${Math.round(currentOpacity * 100)}%`}
+            />
+          </div>
+        )}
+      </li>
+    );
+  };
 
   const layerConfig = [
     { id: 'flood', name: 'Flood Extent' },
@@ -72,9 +93,9 @@ const LayerTree = ({ layers, selectedLayers, onLayerChange }) => {
     },
     {
       name: 'Risk Analysis', children: [
-        { id: 'exposure', name: 'Flood Coverage Rate' },
+        { id: 'exposure', name: 'Flood Coverage Rate (no flood -> fully inundated)' },
         {
-          name: 'G2SFCA Risk', children: [
+          name: 'G2SFCA Risk (Accessibility to flood)', children: [
             { id: 'g2sfca_250m', name: '250m' },
             { id: 'g2sfca_500m', name: '500m' },
             { id: 'g2sfca_1000m', name: '1000m' },
@@ -159,6 +180,7 @@ function App() {
   const [statistics, setStatistics] = useState(null);
   const [layers, setLayers] = useState({});
   const [selectedLayers, setSelectedLayers] = useState(['flood']);
+  const [layerOpacities, setLayerOpacities] = useState({ flood: 0.5 });
   const [selectedBasemap, setSelectedBasemap] = useState('cartodb');
   const [rasterBounds, setRasterBounds] = useState({});
   const [center] = useState([26.6406, -81.8723]); // Fort Myers
@@ -215,6 +237,10 @@ function App() {
         ? prev.filter(l => l !== layerId)
         : [...prev, layerId]
     );
+  };
+
+  const handleOpacityChange = (layerId, opacity) => {
+    setLayerOpacities(prev => ({ ...prev, [layerId]: opacity }));
   };
 
   if (loading) {
@@ -284,6 +310,8 @@ function App() {
                 layers={layers}
                 selectedLayers={selectedLayers}
                 onLayerChange={handleLayerChange}
+                layerOpacities={layerOpacities}
+                onOpacityChange={handleOpacityChange}
               />
             </div>
           </LayerControls>
@@ -311,7 +339,12 @@ function App() {
             {selectedLayers.includes('flood') && floodExtent && (
               <GeoJSON 
                 data={floodExtent}
-                style={{ color: '#0275d8', weight: 1, fillColor: '#0275d8', fillOpacity: 0.5 }}
+                style={{ 
+                  color: '#0275d8', 
+                  weight: 1, 
+                  fillColor: '#0275d8', 
+                  fillOpacity: layerOpacities['flood'] !== undefined ? layerOpacities['flood'] : 0.5 
+                }}
               />
             )}
 
@@ -325,7 +358,7 @@ function App() {
                       [rasterBounds[layerId][1], rasterBounds[layerId][0]],
                       [rasterBounds[layerId][3], rasterBounds[layerId][2]]
                     ]}
-                    opacity={0.7}
+                    opacity={layerOpacities[layerId] !== undefined ? layerOpacities[layerId] : 0.7}
                   />
                 );
               }

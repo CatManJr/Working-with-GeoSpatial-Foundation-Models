@@ -165,9 +165,11 @@ class FileGeodatabase:
         
         # Copy or symlink
         if copy:
+            if target_path.exists() or target_path.is_symlink():
+                target_path.unlink()
             shutil.copy2(source_path, target_path)
         else:
-            if target_path.exists():
+            if target_path.exists() or target_path.is_symlink():
                 target_path.unlink()
             target_path.symlink_to(source_path.absolute())
         
@@ -234,6 +236,11 @@ class FileGeodatabase:
         # Read and save as GeoPackage (single file format)
         gdf = gpd.read_file(source_path)
         target_path = target_dir / f"{name}.gpkg"
+        
+        # Remove existing file if it exists
+        if target_path.exists():
+            target_path.unlink()
+            
         gdf.to_file(target_path, driver="GPKG")
         
         # Read metadata

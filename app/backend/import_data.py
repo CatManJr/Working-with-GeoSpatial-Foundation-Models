@@ -39,7 +39,7 @@ def import_all_data():
             name="flood_extent_helene_2024",
             category="flood",
             description="Hurricane Helene 2024 flood extent (clipped to Fort Myers)",
-            copy=False  # Use symlink to save space
+            copy=True  # Changed to True for portability
         )
     
     # Population raster
@@ -50,7 +50,7 @@ def import_all_data():
             name="population_worldpop",
             category="population",
             description="WorldPop population density for Fort Myers",
-            copy=False
+            copy=True  # Changed to True for portability
         )
     
     # Exposure rasters
@@ -63,7 +63,7 @@ def import_all_data():
             name="flood_coverage_rate",
             category="exposure",
             description="Flood coverage rate per 100m grid cell",
-            copy=False
+            copy=True  # Changed to True for portability
         )
     
     exposed_pop = exposure_dir / "population_flood_exposure.tif"
@@ -73,7 +73,7 @@ def import_all_data():
             name="exposed_population",
             category="exposure",
             description="Population exposed to flooding (weighted by coverage)",
-            copy=False
+            copy=True  # Changed to True for portability
         )
     
     # G2SFCA risk rasters
@@ -85,7 +85,7 @@ def import_all_data():
                 name=f"g2sfca_risk_{bandwidth}m",
                 category="risk",
                 description=f"G2SFCA flood risk assessment (bandwidth={bandwidth}m)",
-                copy=False
+                copy=True  # Changed to True for portability
             )
         
         dist_file = exposure_dir / f"flood_distance_raster_{bandwidth}m.tif"
@@ -95,7 +95,7 @@ def import_all_data():
                 name=f"flood_distance_{bandwidth}m",
                 category="risk",
                 description=f"Distance to nearest flood pixel (bandwidth={bandwidth}m)",
-                copy=False
+                copy=True  # Changed to True for portability
             )
     
     print()
