@@ -35,11 +35,9 @@ COPY app/file_database/ ./app/file_database/
 ENV PORT=8000
 EXPOSE 8000
 
-# 7. Set PYTHONPATH to include the backend directory
-ENV PYTHONPATH=/app/app/backend
+# 7. Set working directory to backend folder
+WORKDIR /app/app/backend
 
-# 8. Set working directory to app folder (where pyproject.toml is)
-WORKDIR /app/app
-
-# 9. Start command using uv run from the project directory
-CMD ["uv", "run", "uvicorn", "app.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 8. Start command using uv run with correct module path
+# Since we're in /app/app/backend, we can import main:app directly
+CMD ["uv", "run", "--directory", "/app/app", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
