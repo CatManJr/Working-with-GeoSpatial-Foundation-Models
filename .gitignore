@@ -2,6 +2,7 @@ drive-download-20251007T000808Z-1-001
 drive-download-20251007T000743Z-1-001
 **.zip
 app/frontend/node_modules
+app/frontend/build
 
 **_.**
 **_.**
@@ -13,6 +14,55 @@ data/*
 __pycache__/
 **.qgz
 
-// Private files
+# Private files
 hf_token.txt
 .env
+
+# Python build artifacts
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Frontend build artifacts
+app/frontend/node_modules/
+app/frontend/build/
+app/frontend/.cache/
+app/frontend/dist/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+.pytest_cache/
+.coverage
+
+# Docker
+.dockerignore
+
+# OS files
+Thumbs.db
+.DS_Store
