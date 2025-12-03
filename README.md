@@ -1,27 +1,27 @@
 # Working with GeoSpatial Foundation Models
-## Fort Myers Flood Risk Analysis & Dashboard for Hurricane Helene
+## Fort Myers Flood Influence Analysis & Dashboard for Hurricane Helene
 
-This is a hands-on project for myself to practice building a full-circle machine learning system combining `cloud computing`, `ML`, `foundation models`, `spatial analysis`, `full-stack development`, and `CI/CD`. Due to finacial concern, I put the web dashboard (source code in `/app`) on the Render rather than my AWS or Azure containers, and you can find the address below. The step by step prcessing pipeline (see below) is not on cloud becase I can't afford AWS EC2. Overall, this repo contains a ML pipeline from fetching data on GEE, traning and predcting, querying Foundation Model inference, to spatial analysis; and a Docker contained web app as the results dash board.
+This is a hands-on project for me to practice building a full-circle machine learning system combining `cloud computing`, `ML`, `foundation models`, `spatial analysis`, `full-stack development`, and `CI/CD`. Due to financial concerns, I put the web dashboard (source code in `/app`) on the Render rather than my AWS or Azure containers, and you can find the address below. The step-by-step processing pipeline (see below) is not on the cloud because I can't afford AWS EC2. Overall, this repo contains an ML pipeline from fetching data on GEE, training and predicting, querying Foundation Model inference, to spatial analysis; and a Docker container web app as the results dashboard.
 
 ## Overview
 
-This project implements an end-to-end workflow for flood risk assessment:
+This project implements an end-to-end workflow for flood influence assessment:
 
-1. **Cloud/Shadow Reconstruction**: Reconstruct cloud-obscured Sentinel-2 imagery using Sentinel-1 GRD and Satellite Embeddings V1 (AlphaEarth Foundations). The pipeline of Cloud Reconstruction is train a LightGBM regression tree model, to predict the Sentinel-2 L1C (Band 2,3,4,8,11,12) by Sentinel-1 GRD (as short term reference) and Satellite Embeddings V1 (as long term reference). The average R-squared is above 0.85, without adjusting hyperparameters.
+1. **Cloud/Shadow Reconstruction**: Reconstruct cloud-obscured Sentinel-2 imagery using Sentinel-1 GRD and Satellite Embeddings V1 (AlphaEarth Foundations). The pipeline of Cloud Reconstruction trains a LightGBM regression tree model to predict the Sentinel-2 L1C (Bands 2,3,4,8,11,12) by Sentinel-1 GRD (as short-term reference) and Satellite Embeddings V1 (as long-term reference). The average R-squared is above 0.85, without adjusting hyperparameters.
    
-2. **Water Segmentation**: Segment water pixels using IBM/NASA Prithvi-EO-2.0-300M-TL-Sen1Floods11 foundation model. Because the model can not run on MacOS, I queried the official demo, which exposed a inference API, to do this task. Permenant water pixels are merged and selected by both NHDArea and NHDWaterbody in Fort Myers. And the flood pixels are defined as: `Segment water pixels - Permenant water pixels`.
+2. **Water Segmentation**: Segment water pixels using IBM/NASA Prithvi-EO-2.0-300M-TL-Sen1Floods11 foundation model. Because the model can not run on macOS, I queried the official demo, which exposed an inference API, to do this task. Permanent water pixels are merged and selected by both NHDArea and NHDWaterbody in Fort Myers. And the flood pixels are defined as: `Segment water pixels - Permanent water pixels`.
 
-3. **Population Exposure**: Calculate exposed (inundated) population using WorldPop data
-4. **Risk Analysis**: Compute spatial accessibility-based risk (influence) scores (G2SFCA method). Totally 4 band width: 250m, 500m, 1000m, 2500m, tosimulate the spread of the surface water.
+3. **Population Exposure**: Calculate the exposed (inundated) population using WorldPop data
+4. **Risk Analysis**: Compute spatial accessibility-based risk (influence) scores (G2SFCA method). Totally 4 bandwidths: 250m, 500m, 1000m, 2500m, to simulate the spread of the surface water.
 
-5. **Web Dashboard**: Interactive visualization and UI for the analysis results. The server only has 0.1 CPU and 512 RAM. Be careful when srollng. And youmay need to wait for several minutes to wake up the app. The wed app can fetch the latest ML pipeline output when offline. The fetched data will be stored in [/app/file_database](https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models/tree/main/app/file_database), and the FastAPI backend can fetch the data here using Python's sqlite3. The forntend is build on React (Javascript).
+5. **Web Dashboard**: Interactive visualization and UI for the analysis results. The server only has 0.1 CPU and 512 RAM. Be careful when scrolling. And you may need to wait for several minutes to wake up the app. The Web app can fetch the latest ML pipeline output when offline. The fetched data will be stored in [/app/file_database](https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models/tree/main/app/file_database), and the FastAPI backend can fetch the data here using Python's sqlite3. The frontend is built on React (JavaScript).
 
-**Cloud dashboard**: https://two024-hurricane-helene-flood-risk.onrender.com (you may need to wait for seconds to awake the Render server)  
+**Cloud dashboard**: https://two024-hurricane-helene-flood-risk.onrender.com (you may need to wait for seconds to awaken the Render server)  
 **Source Code Repository (This repo)**: https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models
 
 ## Project Structure
 
-```
+```bash
 Root/
 ├── paths.py                  # Centralized path configuration
 ├── pyproject.toml            # Python dependencies
@@ -85,8 +85,10 @@ Install dependencies using uv (recommended) or pip:
 pip install uv
 uv sync
 
-# Or using pip
-pip install -r app/backend/requirements.txt
+# Or using pip (suggesting creating a virtue env in the root directory)
+pip install uv
+uv export --no-hashes --no-dev > requirements.txt # Or manually create requirements.txt based on 
+pip install -r requirements.txt
 ```
 
 ## Workflow
@@ -101,26 +103,26 @@ Run `GEE_script/fetch_data.js` in Google Earth Engine Code Editor to download:
 ### 2. Cloud Reconstruction
 ```bash
 uv run reconstruct/check.py        # Validate input data
-uv run reconstruct/make_dataset.py # Feature engineering
-uv run reconstruct/train.py        # Train LightGBM models
+uv run reconstruct/make_dataset.py # Mask out grids needing reconstruction and construct csv data and numpy cache
+uv run reconstruct/train.py        # Train a LightGBM model for each band
 uv run reconstruct/reconstruct.py  # Reconstruct cloudy pixels
-uv run reconstruct/viz.py          # Generate visualizations
+uv run reconstruct/viz.py          # Visualization of the construction input and output
 ```
 
 **Output**: `data/processed/S2_mosaic.tif` (cloud-free composite)
 
 ### 3. Permanent Water Extraction
 ```bash
-uv run flood_extract/permanent_water.py
+uv run flood_extract/permanent_water.py # arrange data from NHD
 ```
 
 Extracts permanent water bodies from NHD (National Hydrology Dataset) to isolate flood-only areas.
 
 ### 4. Flood Detection
 ```bash
-uv run water_segmentation/prepare_Prithvi.py  # Prepare 224x224 tiles
-uv run water_segmentation/predict.py          # Run Prithvi model
-uv run flood_extract/extract_flood.py         # Extract flood pixels
+uv run water_segmentation/prepare_Prithvi.py  # Prepare 512x512 tiles considering the balance of precision and speed
+uv run water_segmentation/predict.py          # Query the model from hugginface space cuz terratorch can not ran on macO
+uv run flood_extract/extract_flood.py         # Extract flood pixels by exclude permanent_water from the prediction
 ```
 
 **Output**: 
@@ -130,27 +132,27 @@ uv run flood_extract/extract_flood.py         # Extract flood pixels
 ### 5. Population Exposure Analysis
 ```bash
 uv run pop_exposure/clip.py        # Clip WorldPop to study area
-uv run pop_exposure/overlay.py     # Calculate exposed population
-uv run pop_exposure/accessibility.py --bandwidth 500  # G2SFCA risk analysis
+uv run pop_exposure/overlay.py     # Calculate exposed population and flood extent
+./run_accessibility.sh  # Automatically run G2SFCA influence analysis for 4 bandwidths by 'uv run accessibility.py -bandwidth "bandwidth"'
 ```
 
-Generates risk layers at multiple bandwidths (250m, 500m, 1000m, 2500m).
+Generates influence layers at multiple bandwidths (250m, 500m, 1000m, 2500m).
 
 ### 6. Web Application
 
 **Development**:
 ```bash
 cd app
-./set_up.sh     # Install dependencies
-./run_dev.sh    # Start backend (port 8000) and frontend (port 3000)
+./set_up.sh     # clean cahche
+./run_dev.sh    # Start backend and frontend in dev mode
 ```
 
 **Production**:
 ```bash
-./run_prod.sh   # Build frontend and serve with backend
+./run_prod.sh   # Build frontend and serve with backend. Remember that you need to first clean the app/frontend/build folder to run run_dev.sh again.
 ```
 
-**Deployment**: Application is containerized using Docker and deployed on Render.
+**Deployment**: The application is containerized with Docker and deployed on Render.
 
 ## Key Technologies
 
@@ -179,66 +181,41 @@ Key paths:
 ### HuggingFace Token
 
 For Prithvi model inference, obtain a token from https://huggingface.co/settings/tokens and either:
-1. Save to `hf_token.txt` in project root, or
-2. Set environment variable: `export HF_TOKEN='your_token'`
+1. Save to `hf_token.txt` in the project root, or
+2. Add a `.env` file and write HF_TOKEN='your_token.'`
 
 Alternatively, run inference locally (Windows/Linux) following: https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11
 
-## Output Files
+## Key Output Files
 
 **Cloud Reconstruction**:
 - `data/processed/S2_mosaic.tif` - Cloud-free Sentinel-2 composite
 
 **Flood Detection**:
+
 - `data/IBM/predict/FortMyersHelene_2024T269_inundated.tif` - Water segmentation
-- `data/flood/FortMyersHelene_2024T269_flood_clipped.{tif,shp}` - Final flood extent
+- `data/flood/FortMyersHelene_2024T269_flood_clipped.{tif,shp}` - Extracted flood extent
 
 **Population Exposure**:
-- `data/pop_exposure/flood_risk_g2sfca_raster_{bandwidth}m.tif` - Risk layers
+
+- `data/pop_exposure/flood_risk_g2sfca_raster_{bandwidth}m.tif` - Influence layers
 - `data/pop_exposure/flood_risk_g2sfca_raster_{bandwidth}m_summary.csv` - Statistics
 
-**Web Application Data**:
+**Web Application Database**:
+
+Arranged like an ArcGIS File Geodatabase （directly fetched and synchronized with /data）
+
 - `app/file_database/rasters/` - All raster layers
 - `app/file_database/vectors/` - Boundaries and geometries
 - `app/file_database/tables/` - Statistical summaries
-
-## Submitting Code as Appendix
-
-For academic submissions with page limits, include only core components in the appendix:
-
-**Recommended Appendix Structure** (~1,200 lines total):
-
-```
-Appendix A: Web Application Core (500 lines)
-  A.1 Backend API (app/backend/main.py)
-  A.2 File Geodatabase Manager (app/backend/file_geodatabase.py)
-  A.3 Frontend Dashboard (app/frontend/src/App.js)
-
-Appendix B: Spatial Analysis Algorithms (400 lines)
-  B.1 G2SFCA Risk Model (pop_exposure/accessibility.py)
-  B.2 Population Overlay (pop_exposure/overlay.py)
-
-Appendix C: Data Processing (200 lines)
-  C.1 Cloud Reconstruction (reconstruct/reconstruct.py)
-  C.2 Flood Extraction (flood_extract/extract_flood.py)
-
-Appendix D: Deployment Configuration (100 lines)
-  D.1 Dockerfile
-  D.2 Dependencies (requirements.txt, package.json)
-
-Complete source code (30,000+ lines) available at:
-https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models
-```
-
-**Exclude from appendix**: CSS files, utility scripts, test files, build artifacts, data processing logs.
 
 ## Citation
 
 ```bibtex
 @software{fortmyers_flood_2024,
   author = {Your Name},
-  title = {Fort Myers Hurricane Helene Flood Risk Analysis},
-  year = {2024},
+  title = {Fort Myers Hurricane Helene Flood Influence Analysis},
+  year = {2025},
   url = {https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models}
 }
 ```
