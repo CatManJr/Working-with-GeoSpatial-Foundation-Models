@@ -27,10 +27,15 @@ Root/
 ├── pyproject.toml            # Python dependencies
 ├── Dockerfile                # Container configuration for deployment
 ├── clean_index.sh            # MacOS index cleanup utility
+├── run_accessibility.sh      # Shell script for batch G2SFCA analysis
+│
+├── utils/                    # Utility scripts
+│   └── clean_._.py           # Python script to clean MacOS index files
 │
 ├── app/                      # Full-stack web application
 │   ├── backend/              # FastAPI backend
 │   │   ├── main.py           # API endpoints
+│   │   ├── import_data.py    # ETL script: Imports analysis results to File Geodatabase
 │   │   ├── file_geodatabase.py  # Spatial data management
 │   │   └── requirements.txt  # Python dependencies
 │   ├── frontend/             # React dashboard
@@ -138,16 +143,29 @@ uv run pop_exposure/overlay.py     # Calculate exposed population and flood exte
 
 Generates influence layers at multiple bandwidths (250m, 500m, 1000m, 2500m).
 
-### 6. Web Application
+### 6. Data Migration (Crucial)
+Before running the web app, you must import the analysis results into the application's File Geodatabase. So we could run the web app with only 0.1 COU and 512MB RAM with an offline database.
+
+```bash
+# Clean MacOS hidden files (Optional, for Mac users)
+./clean_index.sh
+
+# Import data from data/ to app/file_database/
+uv run app/backend/import_data.py
+```
+
+### 7. Web Dashboard
 
 **Development**:
 ```bash
 cd app
-./set_up.sh     # clean cahche
-./run_dev.sh    # Start backend and frontend in dev mode
+# Ensure data is imported first (see Step 6)
+./set_up.sh # Recommend running this first if you are working on macOS with an ExFAT disk
+./run_dev.sh    # Start backend (FastAPI) and frontend (React) in dev mode
 ```
 
 **Production**:
+
 ```bash
 ./run_prod.sh   # Build frontend and serve with backend. Remember that you need to first clean the app/frontend/build folder to run run_dev.sh again.
 ```
@@ -156,10 +174,11 @@ cd app
 
 ## Key Technologies
 
-**Geospatial**: rasterio, geopandas, shapely, GDAL  
-**Machine Learning**: LightGBM, HuggingFace Transformers, IBM Prithvi  
-**Web Stack**: FastAPI, React, Leaflet, Recharts  
-**Deployment**: Docker, Render  
+**Languages**: Python, JavaScript, HTML, CSS, Shell
+**Geospatial**: rasterio, geopandas, shapely
+**Machine Learning**: LightGBM, HuggingFace Transformers, IBM/NASA Prithvi-EO
+**Web Stack**: FastAPI, React, Leaflet, Gradio
+**Deployment**: Docker, Render 
 
 ## Configuration
 
