@@ -1,5 +1,5 @@
 """
-FastAPI Backend for Flood Risk Analysis Dashboard
+FastAPI Backend for Flood Influence Analysis Dashboard
 Serves geospatial data and statistics for interactive visualization
 Uses File Geodatabase for centralized data management
 
@@ -33,8 +33,8 @@ FRONTEND_BUILD = Path(__file__).parent.parent / "frontend" / "build"
 PRODUCTION_MODE = FRONTEND_BUILD.exists()
 
 app = FastAPI(
-    title="Fort Myers Flood Risk Analysis API",
-    description="Full-stack flood risk analysis dashboard with File Geodatabase",
+    title="Fort Myers Flood Influence Analysis API",
+    description="Full-stack flood influence analysis dashboard with File Geodatabase",
     version="2.0.0"
 )
 
@@ -61,14 +61,14 @@ async def root():
     if PRODUCTION_MODE:
         return FileResponse(FRONTEND_BUILD / "index.html")
     return {
-        "message": "Fort Myers Flood Risk Analysis API",
+        "message": "Fort Myers Flood Influence Analysis API",
         "version": "2.0.0",
         "features": ["File Geodatabase", "Centralized Data Management"],
         "endpoints": [
             "/api/boundary",
             "/api/flood-extent",
             "/api/statistics",
-            "/api/risk-layers",
+            "/api/influence-layers",
             "/api/geodatabase/summary",
             "/api/geodatabase/datasets",
             "/api/raster-bounds/{layer}",
@@ -225,9 +225,9 @@ async def get_statistics():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading statistics: {str(e)}")
 
-@app.get("/api/risk-layers")
-async def get_risk_layers():
-    """Get available risk analysis layers from geodatabase"""
+@app.get("/api/influence-layers")
+async def get_influence_layers():
+    """Get available influence analysis layers from geodatabase"""
     layers = {}
     
     # Helper to get min/max
@@ -341,7 +341,7 @@ async def get_risk_layers():
 async def get_raster_bounds(layer: str):
     """Get bounds of a raster layer in WGS84"""
     try:
-        layers = await get_risk_layers()
+        layers = await get_influence_layers()
         if layer not in layers:
             raise HTTPException(status_code=404, detail=f"Layer {layer} not found")
         
@@ -374,7 +374,7 @@ async def get_raster_as_png(layer: str, width: int = 800):
     Fully dynamic rendering for all layers
     """
     try:
-        layers = await get_risk_layers()
+        layers = await get_influence_layers()
         if layer not in layers:
             raise HTTPException(status_code=404, detail=f"Layer {layer} not found")
         

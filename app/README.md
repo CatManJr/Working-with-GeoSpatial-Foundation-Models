@@ -1,8 +1,8 @@
-# Fort Myers Flood Risk Analysis Dashboard
+# Fort Myers Flood Influence Analysis Dashboard
 
-A comprehensive, interactive flood risk analysis system featuring a decoupled front-end and back-end architecture.
+A comprehensive, interactive flood influence analysis system featuring a decoupled front-end and back-end architecture.
 
-## Project Structure
+## Source Code Structure
 
 ```
 app/
@@ -70,12 +70,12 @@ The frontend application will automatically open in your browser at **http://loc
   
 - Interactive charts:
   - Bar chart for population distribution by flood coverage rate.
-  - Pie chart for G2SFCA risk assessment.
+  - Pie chart for G2SFCA influence assessment.
   - Comparison of results using different bandwidth parameters.
 
 ### Real-time Data
 - Data is dynamically loaded from the backend API.
-- Support for multiple risk layers.
+- Support for multiple influence layers.
 - Responsive design for various screen sizes.
 
 ## API Endpoints
@@ -88,7 +88,7 @@ The frontend application will automatically open in your browser at **http://loc
 | `/api/boundary` | GET | Returns the city boundary as a GeoJSON object. |
 | `/api/flood-extent` | GET | Returns the flood extent as a GeoJSON object. |
 | `/api/statistics` | GET | Retrieves comprehensive statistical data. |
-| `/api/risk-layers` | GET | Lists all available risk layers. |
+| `/api/influence-layers` | GET | Lists all available influence layers. |
 | `/api/raster-bounds/{layer}` | GET | Returns the bounding box for a specified raster layer. |
 | `/api/raster-png/{layer}` | GET | Returns a specified raster layer as a PNG image. |
 
@@ -109,12 +109,12 @@ All data is loaded from the `data/` directory:
 2.  **Population Density**: Continuous data representing population per unit area.
 3.  **Flood Coverage Rate**: Percentage of flood coverage.
 4.  **Exposed Population**: Continuous data on the population within flooded areas.
-5.  **G2SFCA Risk (250m/500m/1000m/2500m)**: Risk scores calculated with different bandwidths.
+5.  **G2SFCA Influence (250m/500m/1000m/2500m)**: Influence scores calculated with different bandwidths.
 
 ### Color Schemes
 - **Blues**: Used for flood-related layers.
 - **YlOrRd/Reds**: Used for population and exposure layers.
-- **RdPu**: Used for risk score layers.
+- **RdPu**: Used for influence score layers.
 
 ## Responsive Design
 
@@ -133,7 +133,7 @@ const API_BASE = 'http://localhost:8000';  // Modify to your backend address
 
 ### Adding a New Layer
 
-1.  Add the new layer definition in the `get_risk_layers()` function in `backend/main.py`.
+1.  Add the new layer definition in the `get_influence_layers()` function in `backend/main.py`.
 2.  The frontend will automatically populate the new layer in the dropdown menu.
 
 ### Customizing Styles

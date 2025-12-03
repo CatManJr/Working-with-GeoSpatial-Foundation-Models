@@ -43,8 +43,8 @@ const BASEMAPS = {
 const LayerTree = ({ layers, selectedLayers, onLayerChange, layerOpacities, onOpacityChange }) => {
   const [openGroups, setOpenGroups] = useState({
     'Population': true,
-    'Risk Analysis': true,
-    'G2SFCA Risk': true
+    'Influence Analysis': true,
+    'G2SFCA Influence': true
   });
 
   const toggleGroup = (group) => {
@@ -93,7 +93,7 @@ const LayerTree = ({ layers, selectedLayers, onLayerChange, layerOpacities, onOp
       ]
     },
     {
-      name: 'Risk Analysis', children: [
+      name: 'Influence Analysis', children: [
         { id: 'exposure', name: 'Flood Coverage Rate (no flood -> fully inundated)' },
         {
           name: 'G2SFCA Influence (Spatial flood accessibility)', children: [
@@ -228,7 +228,7 @@ function App() {
           axios.get(`${API_BASE}/api/boundary`),
           axios.get(`${API_BASE}/api/flood-extent`),
           axios.get(`${API_BASE}/api/statistics`),
-          axios.get(`${API_BASE}/api/risk-layers`)
+          axios.get(`${API_BASE}/api/influence-layers`)
         ]);
 
         setBoundary(boundaryRes.data);
@@ -268,7 +268,7 @@ function App() {
   if (loading) {
     return (
       <div className="loading">
-        <h2>Loading Fort Myers Flood Risk Dashboard...</h2>
+        <h2>Loading Fort Myers Flood Influence Dashboard...</h2>
       </div>
     );
   }
@@ -308,7 +308,7 @@ function App() {
       <header className="header">
         <div style={{ width: '140px' }}></div> {/* Spacer for alignment */}
         <div className="header-content">
-          <h1>Fort Myers Flood Risk Analysis Dashboard</h1>
+          <h1>Fort Myers Flood Influence Analysis Dashboard</h1>
           <p>Hurricane Helene 2024 - Population Exposure Assessment</p>
         </div>
         <a 

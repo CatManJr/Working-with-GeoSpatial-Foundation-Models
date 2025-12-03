@@ -55,7 +55,7 @@ class FileGeodatabase:
         (self.rasters_dir / "flood").mkdir(exist_ok=True)
         (self.rasters_dir / "population").mkdir(exist_ok=True)
         (self.rasters_dir / "exposure").mkdir(exist_ok=True)
-        (self.rasters_dir / "risk").mkdir(exist_ok=True)
+        (self.rasters_dir / "influence").mkdir(exist_ok=True)
         
         # Vector subdirectories
         (self.vectors_dir / "boundaries").mkdir(exist_ok=True)
