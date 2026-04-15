@@ -232,7 +232,7 @@ Arranged like an ArcGIS File Geodatabase （directly fetched and synchronized wi
 
 ```bibtex
 @software{fortmyers_flood_2024,
-  author = {Your Name},
+  author = {Zhicheng Xu},
   title = {Fort Myers Hurricane Helene Flood Influence Analysis},
   year = {2025},
   url = {https://github.com/CatManJr/Working-with-GeoSpatial-Foundation-Models}
